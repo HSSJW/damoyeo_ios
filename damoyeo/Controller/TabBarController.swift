@@ -7,6 +7,7 @@
 
 
 import UIKit
+import FirebaseAuth
 
 class TabBarController: UITabBarController {
     
@@ -17,11 +18,14 @@ class TabBarController: UITabBarController {
     }
     
     private func setupTabBar() {
+        
+        let currentUserId = Auth.auth().currentUser?.uid ?? ""
+        
         // 각 뷰 컨트롤러 생성
         let favoriteVC = FavoriteViewController()
         let chatVC = ChatViewController()
         let postListVC = PostListViewController()
-        let activityVC = ActivityViewController()
+        let activityVC = MyActivityViewController(userId: currentUserId)
         let profileVC = ProfileViewController()
         
         // 탭바 아이템 설정

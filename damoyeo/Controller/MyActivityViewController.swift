@@ -180,9 +180,52 @@ class MyActivityViewController: UIViewController {
                     if let error = error {
                         print("내 게시물 로드 실패: \(error.localizedDescription)")
                     } else if let documents = snapshot?.documents {
-                        self?.myPosts = documents.compactMap { doc in
-                            Post.fromFirestore(doc)
+                        var loadedPosts: [Post] = []
+                        
+                        for document in documents {
+                            let data = document.data()
+                            
+                            // Firestore 데이터를 Post 모델로 변환 (PostListViewController와 동일한 방식)
+                            if let title = data["title"] as? String,
+                               let content = data["content"] as? String,
+                               let tag = data["tag"] as? String,
+                               let recruit = data["recruit"] as? Int,
+                               let address = data["address"] as? String,
+                               let detailAddress = data["detailAddress"] as? String,
+                               let category = data["category"] as? String,
+                               let cost = data["cost"] as? Int,
+                               let authorId = data["id"] as? String {
+                                
+                                // 날짜 처리
+                                let createdAt = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
+                                let meetingTime = (data["meetingTime"] as? Timestamp)?.dateValue() ?? Date()
+                                
+                                // 이미지 URL 처리
+                                let imageUrls = data["imageUrls"] as? [String] ?? []
+                                let imageUrl = data["imageUrl"] as? String ?? ""
+                                
+                                let post = Post(
+                                    id: document.documentID,
+                                    title: title,
+                                    content: content,
+                                    tag: tag,
+                                    recruit: recruit,
+                                    createdAt: createdAt,
+                                    imageUrl: imageUrl,
+                                    imageUrls: imageUrls,
+                                    address: address,
+                                    detailAddress: detailAddress,
+                                    category: category,
+                                    cost: cost,
+                                    meetingTime: meetingTime,
+                                    authorId: authorId
+                                )
+                                
+                                loadedPosts.append(post)
+                            }
                         }
+                        
+                        self?.myPosts = loadedPosts
                     }
                     completion()
                 }
@@ -240,8 +283,45 @@ class MyActivityViewController: UIViewController {
         for postId in postIds {
             group.enter()
             db.collection("posts").document(postId).getDocument { doc, error in
-                if let doc = doc, let post = Post.fromFirestore(doc) {
-                    posts.append(post)
+                if let doc = doc, let data = doc.data() {
+                    // Firestore 데이터를 Post 모델로 변환
+                    if let title = data["title"] as? String,
+                       let content = data["content"] as? String,
+                       let tag = data["tag"] as? String,
+                       let recruit = data["recruit"] as? Int,
+                       let address = data["address"] as? String,
+                       let detailAddress = data["detailAddress"] as? String,
+                       let category = data["category"] as? String,
+                       let cost = data["cost"] as? Int,
+                       let authorId = data["id"] as? String {
+                        
+                        // 날짜 처리
+                        let createdAt = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
+                        let meetingTime = (data["meetingTime"] as? Timestamp)?.dateValue() ?? Date()
+                        
+                        // 이미지 URL 처리
+                        let imageUrls = data["imageUrls"] as? [String] ?? []
+                        let imageUrl = data["imageUrl"] as? String ?? ""
+                        
+                        let post = Post(
+                            id: doc.documentID,
+                            title: title,
+                            content: content,
+                            tag: tag,
+                            recruit: recruit,
+                            createdAt: createdAt,
+                            imageUrl: imageUrl,
+                            imageUrls: imageUrls,
+                            address: address,
+                            detailAddress: detailAddress,
+                            category: category,
+                            cost: cost,
+                            meetingTime: meetingTime,
+                            authorId: authorId
+                        )
+                        
+                        posts.append(post)
+                    }
                 }
                 group.leave()
             }

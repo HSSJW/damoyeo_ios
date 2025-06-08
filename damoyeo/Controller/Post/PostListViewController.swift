@@ -178,4 +178,14 @@ extension PostListViewController: UITableViewDataSource, UITableViewDelegate {
         let detailVC = PostDetailViewController(post: selectedPost)
         navigationController?.pushViewController(detailVC, animated: true)
     }
+    
+    // 좋아요 상태가 변경되었을 때 해당 셀만 갱신
+    func refreshCell(for postId: String) {
+            if let index = posts.firstIndex(where: { $0.id == postId }) {
+                let indexPath = IndexPath(row: index, section: 0)
+                DispatchQueue.main.async {
+                    self.tableView.reloadRows(at: [indexPath], with: .none)
+                }
+            }
+        }
 }
