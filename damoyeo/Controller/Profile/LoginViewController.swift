@@ -318,9 +318,18 @@ class LoginViewController: UIViewController {
     }
     
     private func navigateToMainApp() {
-        // SceneDelegate를 통해 메인 앱으로 이동
-        if let sceneDelegate = view.window?.windowScene?.delegate as? SceneDelegate {
-            sceneDelegate.checkAuthenticationState()
+        print("🎯 LoginVC: 직접 메인 앱으로 이동")
+        
+        let mainApp = TabBarController()
+        
+        if let window = view.window {
+            print("🪟 LoginVC: Window 찾음, 직접 전환")
+            window.rootViewController = mainApp
+            window.makeKeyAndVisible()
+            
+            UIView.transition(with: window, duration: 0.3, options: .transitionCrossDissolve, animations: nil) 
+        } else {
+            print("❌ LoginVC: Window를 찾을 수 없음")
         }
     }
     

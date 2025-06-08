@@ -6,13 +6,14 @@
 //
 
 import UIKit
+import FirebaseAuth
 import FirebaseFirestore
 
 class MyActivityViewController: UIViewController {
     
     // MARK: - UI Components
     private let segmentedControl: UISegmentedControl = {
-        let items = ["내 모집글", "참가한 모집"]
+        let items = ["내 모집", "참가한 모집"]
         let control = UISegmentedControl(items: items)
         control.selectedSegmentIndex = 0
         return control
@@ -20,9 +21,19 @@ class MyActivityViewController: UIViewController {
     
     private let tableView: UITableView = {
         let tableView = UITableView()
-        tableView.register(PostTableViewCell.self, forCellReuseIdentifier: "PostTableViewCell")
-        tableView.rowHeight = 104
+        tableView.separatorStyle = .singleLine
+        tableView.backgroundColor = .systemBackground
         return tableView
+    }()
+    
+    private let emptyStateLabel: UILabel = {
+        let label = UILabel()
+        label.text = "게시물이 없습니다"
+        label.textAlignment = .center
+        label.textColor = .systemGray
+        label.font = .systemFont(ofSize: 16)
+        label.isHidden = true
+        return label
     }()
     
     private let loadingIndicator: UIActivityIndicatorView = {
@@ -32,10 +43,29 @@ class MyActivityViewController: UIViewController {
     }()
     
     // MARK: - Properties
-    private let userId: String
+    private var userId: String
     private var myPosts: [Post] = []
     private var participatedPosts: [Post] = []
-    private var currentPosts: [Post] = []
+    private var currentMode: ActivityMode = .myPosts {
+        didSet {
+            tableView.reloadData()
+            updateEmptyState()
+        }
+    }
+    
+    private enum ActivityMode {
+        case myPosts
+        case participatedPosts
+        
+        var posts: [Post] {
+            switch self {
+            case .myPosts:
+                return []  // 이 값은 실제로는 사용되지 않음
+            case .participatedPosts:
+                return []  // 이 값은 실제로는 사용되지 않음
+            }
+        }
+    }
     
     // MARK: - Initialization
     init(userId: String) {
@@ -53,6 +83,11 @@ class MyActivityViewController: UIViewController {
         loadData()
     }
     
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        loadData() // 화면이 나타날 때마다 데이터 새로고침
+    }
+    
     // MARK: - UI Setup
     private func setupUI() {
         view.backgroundColor = .systemBackground
@@ -60,17 +95,22 @@ class MyActivityViewController: UIViewController {
         
         view.addSubview(segmentedControl)
         view.addSubview(tableView)
+        view.addSubview(emptyStateLabel)
         view.addSubview(loadingIndicator)
         
+        setupTableView()
         setupConstraints()
         setupActions()
-        
-        tableView.dataSource = self
+    }
+    
+    private func setupTableView() {
         tableView.delegate = self
+        tableView.dataSource = self
+        tableView.register(PostTableViewCell.self, forCellReuseIdentifier: "PostCell")
     }
     
     private func setupConstraints() {
-        [segmentedControl, tableView, loadingIndicator].forEach {
+        [segmentedControl, tableView, emptyStateLabel, loadingIndicator].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
         }
         
@@ -80,11 +120,15 @@ class MyActivityViewController: UIViewController {
             segmentedControl.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             segmentedControl.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
             
-            // TableView
+            // Table View
             tableView.topAnchor.constraint(equalTo: segmentedControl.bottomAnchor, constant: 16),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            
+            // Empty State Label
+            emptyStateLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            emptyStateLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor),
             
             // Loading Indicator
             loadingIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
@@ -96,6 +140,11 @@ class MyActivityViewController: UIViewController {
         segmentedControl.addTarget(self, action: #selector(segmentChanged), for: .valueChanged)
     }
     
+    // MARK: - Actions
+    @objc private func segmentChanged() {
+        currentMode = segmentedControl.selectedSegmentIndex == 0 ? .myPosts : .participatedPosts
+    }
+    
     // MARK: - Data Loading
     private func loadData() {
         loadingIndicator.startAnimating()
@@ -104,19 +153,20 @@ class MyActivityViewController: UIViewController {
         
         // 내가 작성한 게시물 로드
         group.enter()
-        loadMyPosts {
+        loadMyPosts { [weak self] in
             group.leave()
         }
         
         // 내가 참가한 게시물 로드
         group.enter()
-        loadParticipatedPosts {
+        loadParticipatedPosts { [weak self] in
             group.leave()
         }
         
-        group.notify(queue: .main) {
-            self.loadingIndicator.stopAnimating()
-            self.updateCurrentPosts()
+        group.notify(queue: .main) { [weak self] in
+            self?.loadingIndicator.stopAnimating()
+            self?.tableView.reloadData()
+            self?.updateEmptyState()
         }
     }
     
@@ -126,59 +176,14 @@ class MyActivityViewController: UIViewController {
         db.collection("posts")
             .whereField("id", isEqualTo: userId)
             .getDocuments { [weak self] snapshot, error in
-                if let error = error {
-                    print("내 게시물 로드 실패: \(error.localizedDescription)")
-                    completion()
-                    return
-                }
-                
-                guard let documents = snapshot?.documents else {
-                    completion()
-                    return
-                }
-                
-                var posts: [Post] = []
-                for document in documents {
-                    let data = document.data()
-                    
-                    if let title = data["title"] as? String,
-                       let content = data["content"] as? String,
-                       let tag = data["tag"] as? String,
-                       let recruit = data["recruit"] as? Int,
-                       let address = data["address"] as? String,
-                       let detailAddress = data["detailAddress"] as? String,
-                       let category = data["category"] as? String,
-                       let cost = data["cost"] as? Int,
-                       let authorId = data["id"] as? String {
-                        
-                        let createdAt = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
-                        let meetingTime = (data["meetingTime"] as? Timestamp)?.dateValue() ?? Date()
-                        let imageUrls = data["imageUrls"] as? [String] ?? []
-                        let imageUrl = data["imageUrl"] as? String ?? ""
-                        
-                        let post = Post(
-                            id: document.documentID,
-                            title: title,
-                            content: content,
-                            tag: tag,
-                            recruit: recruit,
-                            createdAt: createdAt,
-                            imageUrl: imageUrl,
-                            imageUrls: imageUrls,
-                            address: address,
-                            detailAddress: detailAddress,
-                            category: category,
-                            cost: cost,
-                            meetingTime: meetingTime,
-                            authorId: authorId
-                        )
-                        
-                        posts.append(post)
-                    }
-                }
-                
                 DispatchQueue.main.async {
-                    self?.myPosts = posts.sorted { $0.createdAt > $1.createdAt }
+                    if let error = error {
+                        print("내 게시물 로드 실패: \(error.localizedDescription)")
+                    } else if let documents = snapshot?.documents {
+                        self?.myPosts = documents.compactMap { doc in
+                            Post.fromFirestore(doc)
+                        }
+                    }
                     completion()
                 }
             }
@@ -186,91 +191,75 @@ class MyActivityViewController: UIViewController {
     
     private func loadParticipatedPosts(completion: @escaping () -> Void) {
         let db = Firestore.firestore()
+        var participatedPostIds: [String] = []
         
-        // 모든 게시물에서 내가 참가한 것들 찾기
+        // 1. 먼저 내가 참가한 게시물 ID들을 찾기
         db.collection("posts").getDocuments { [weak self] snapshot, error in
+            guard let self = self else { return }
+            
             if let error = error {
                 print("참가한 게시물 로드 실패: \(error.localizedDescription)")
-                completion()
-                return
-            }
-            
-            guard let documents = snapshot?.documents else {
-                completion()
+                DispatchQueue.main.async { completion() }
                 return
             }
             
             let group = DispatchGroup()
-            var participatedPosts: [Post] = []
             
-            for document in documents {
+            for document in snapshot?.documents ?? [] {
                 group.enter()
                 
-                // 각 게시물의 proposers 서브컬렉션에서 내 ID 확인
-                document.reference.collection("proposers").document(self?.userId ?? "").getDocument { proposerDoc, error in
+                // 각 게시물의 proposers 컬렉션에서 내 ID 확인
+                document.reference.collection("proposers").document(self.userId).getDocument { proposerDoc, _ in
                     if proposerDoc?.exists == true {
-                        // 내가 참가한 게시물
-                        let data = document.data()
-                        
-                        if let title = data["title"] as? String,
-                           let content = data["content"] as? String,
-                           let tag = data["tag"] as? String,
-                           let recruit = data["recruit"] as? Int,
-                           let address = data["address"] as? String,
-                           let detailAddress = data["detailAddress"] as? String,
-                           let category = data["category"] as? String,
-                           let cost = data["cost"] as? Int,
-                           let authorId = data["id"] as? String {
-                            
-                            let createdAt = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
-                            let meetingTime = (data["meetingTime"] as? Timestamp)?.dateValue() ?? Date()
-                            let imageUrls = data["imageUrls"] as? [String] ?? []
-                            let imageUrl = data["imageUrl"] as? String ?? ""
-                            
-                            let post = Post(
-                                id: document.documentID,
-                                title: title,
-                                content: content,
-                                tag: tag,
-                                recruit: recruit,
-                                createdAt: createdAt,
-                                imageUrl: imageUrl,
-                                imageUrls: imageUrls,
-                                address: address,
-                                detailAddress: detailAddress,
-                                category: category,
-                                cost: cost,
-                                meetingTime: meetingTime,
-                                authorId: authorId
-                            )
-                            
-                            participatedPosts.append(post)
-                        }
+                        participatedPostIds.append(document.documentID)
                     }
                     group.leave()
                 }
             }
             
             group.notify(queue: .main) {
-                self?.participatedPosts = participatedPosts.sorted { $0.createdAt > $1.createdAt }
-                completion()
+                // 2. 참가한 게시물들의 상세 정보 가져오기
+                self.loadPostDetails(postIds: participatedPostIds) { posts in
+                    self.participatedPosts = posts
+                    completion()
+                }
             }
         }
     }
     
-    // MARK: - Actions
-    @objc private func segmentChanged() {
-        updateCurrentPosts()
-    }
-    
-    private func updateCurrentPosts() {
-        if segmentedControl.selectedSegmentIndex == 0 {
-            currentPosts = myPosts
-        } else {
-            currentPosts = participatedPosts
+    private func loadPostDetails(postIds: [String], completion: @escaping ([Post]) -> Void) {
+        guard !postIds.isEmpty else {
+            completion([])
+            return
         }
         
-        tableView.reloadData()
+        let db = Firestore.firestore()
+        var posts: [Post] = []
+        let group = DispatchGroup()
+        
+        for postId in postIds {
+            group.enter()
+            db.collection("posts").document(postId).getDocument { doc, error in
+                if let doc = doc, let post = Post.fromFirestore(doc) {
+                    posts.append(post)
+                }
+                group.leave()
+            }
+        }
+        
+        group.notify(queue: .main) {
+            completion(posts)
+        }
+    }
+    
+    private func updateEmptyState() {
+        let isEmpty = currentPosts.isEmpty
+        emptyStateLabel.isHidden = !isEmpty
+        emptyStateLabel.text = currentMode == .myPosts ? "작성한 게시물이 없습니다" : "참가한 게시물이 없습니다"
+    }
+    
+    private var currentPosts: [Post] {
+        return currentMode == .myPosts ? myPosts : participatedPosts
     }
 }
 
@@ -282,20 +271,25 @@ extension MyActivityViewController: UITableViewDataSource, UITableViewDelegate {
     }
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "PostTableViewCell", for: indexPath) as! PostTableViewCell
-        let post = currentPosts[indexPath.row]
+        guard let cell = tableView.dequeueReusableCell(withIdentifier: "PostCell", for: indexPath) as? PostTableViewCell else {
+            return UITableViewCell()
+        }
         
+        let post = currentPosts[indexPath.row]
         cell.configure(with: post)
-        cell.accessoryType = .disclosureIndicator
         
         return cell
     }
     
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
-        let selectedPost = currentPosts[indexPath.row]
         
-        let detailVC = PostDetailViewController(post: selectedPost)
+        let post = currentPosts[indexPath.row]
+        let detailVC = PostDetailViewController(post: post)
         navigationController?.pushViewController(detailVC, animated: true)
+    }
+    
+    func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
+        return 120
     }
 }

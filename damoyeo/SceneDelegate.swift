@@ -13,12 +13,22 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
-        
+            
         guard let windowScene = (scene as? UIWindowScene) else { return }
         
         window = UIWindow(windowScene: windowScene)
-        window?.rootViewController = TabBarController()
+        
+        // AuthGate를 루트 뷰 컨트롤러로 설정
+        let authGate = AuthGate()
+        window?.rootViewController = authGate
         window?.makeKeyAndVisible()
+    }
+        
+    // AuthGate에서 호출할 수 있는 메서드 추가
+    func checkAuthenticationState() {
+        if let authGate = window?.rootViewController as? AuthGate {
+            authGate.checkAuthenticationState()
+        }
     }
 
     func sceneDidDisconnect(_ scene: UIScene) {
