@@ -1,4 +1,5 @@
 import UIKit
+import FirebaseFirestore
 
 class PostListViewController: UIViewController {
     
@@ -13,7 +14,7 @@ class PostListViewController: UIViewController {
         setupUI()
         setupTableView()
         setupNavigationBar()
-        loadSampleData() // 임시 데이터
+        loadFirebaseData()
     }
     
     // MARK: - UI Setup
@@ -62,8 +63,11 @@ class PostListViewController: UIViewController {
         tableView.delegate = self
         tableView.dataSource = self
         
-        // 셀 등록 (다음 단계에서 구현)
-        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "PostCell")
+        // 커스텀 셀 등록
+        tableView.register(PostTableViewCell.self, forCellReuseIdentifier: "PostTableViewCell")
+        
+        // 셀 높이 설정
+        tableView.rowHeight = 104
     }
     
     // MARK: - Actions
@@ -83,29 +87,95 @@ class PostListViewController: UIViewController {
     }
     
     // MARK: - Data
-    private func loadSampleData() {
-        // 임시 데이터 (다음 단계에서 실제 데이터로 교체)
-        print("임시 데이터 로드됨")
+    private func loadFirebaseData() {
+        let db = Firestore.firestore()
+        
+        db.collection("posts").getDocuments { [weak self] (querySnapshot, error) in
+            if let error = error {
+                print("Error getting documents: \(error)")
+                return
+            }
+            
+            guard let documents = querySnapshot?.documents else {
+                print("No documents found")
+                return
+            }
+            
+            var loadedPosts: [Post] = []
+            
+            for document in documents {
+                let data = document.data()
+                
+                // Firestore 데이터를 Post 모델로 변환
+                if let title = data["title"] as? String,
+                   let content = data["content"] as? String,
+                   let tag = data["tag"] as? String,
+                   let recruit = data["recruit"] as? Int,
+                   let address = data["address"] as? String,
+                   let detailAddress = data["detailAddress"] as? String,
+                   let category = data["category"] as? String,
+                   let cost = data["cost"] as? Int,
+                   let authorId = data["id"] as? String {
+                    
+                    // 날짜 처리
+                    let createdAt = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
+                    let meetingTime = (data["meetingTime"] as? Timestamp)?.dateValue() ?? Date()
+                    
+                    // 이미지 URL 처리
+                    let imageUrls = data["imageUrls"] as? [String] ?? []
+                    let imageUrl = data["imageUrl"] as? String ?? ""
+                    
+                    let post = Post(
+                        id: document.documentID,
+                        title: title,
+                        content: content,
+                        tag: tag,
+                        recruit: recruit,
+                        createdAt: createdAt,
+                        imageUrl: imageUrl,
+                        imageUrls: imageUrls,
+                        address: address,
+                        detailAddress: detailAddress,
+                        category: category,
+                        cost: cost,
+                        meetingTime: meetingTime,
+                        authorId: authorId
+                    )
+                    
+                    loadedPosts.append(post)
+                }
+            }
+            
+            DispatchQueue.main.async {
+                self?.posts = loadedPosts
+                self?.tableView.reloadData()
+                print("Firebase에서 \(loadedPosts.count)개 게시물 로드 완료!")
+            }
+        }
     }
 }
 
-// MARK: - TableView DataSource & Delegate
 extension PostListViewController: UITableViewDataSource, UITableViewDelegate {
     
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return 5 // 임시로 5개 셀
+        return posts.count // 실제 posts 배열 개수
     }
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "PostCell", for: indexPath)
-        cell.textLabel?.text = "게시물 \(indexPath.row + 1)"
+        let cell = tableView.dequeueReusableCell(withIdentifier: "PostTableViewCell", for: indexPath) as! PostTableViewCell
+        let post = posts[indexPath.row]
+        
+        cell.configure(with: post)
         cell.accessoryType = .disclosureIndicator
+        
         return cell
     }
     
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
-        print("게시물 \(indexPath.row + 1) 선택됨")
-        // TODO: 게시물 상세 화면으로 이동
+        let selectedPost = posts[indexPath.row]
+        
+        let detailVC = PostDetailViewController(post: selectedPost)
+        navigationController?.pushViewController(detailVC, animated: true)
     }
 }
