@@ -146,24 +146,23 @@ class PostTableViewCell: UITableViewCell {
             contentLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
             contentLabel.trailingAnchor.constraint(equalTo: favoriteButton.leadingAnchor, constant: -12),
             
-            // Tag Label
+            // Date Label - contentLabel 바로 아래로 이동
+            dateLabel.leadingAnchor.constraint(equalTo: postImageView.trailingAnchor, constant: 12),
+            dateLabel.topAnchor.constraint(equalTo: contentLabel.bottomAnchor, constant: 8),
+            
+            // Tag Label - dateLabel 아래, 하단에 위치 (categoryLabel과 같은 높이)
             tagLabel.leadingAnchor.constraint(equalTo: postImageView.trailingAnchor, constant: 12),
-            tagLabel.topAnchor.constraint(equalTo: contentLabel.bottomAnchor, constant: 8),
+            tagLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
             tagLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 50),
             tagLabel.heightAnchor.constraint(equalToConstant: 20),
             
-            // Category Label (참가인원과 같은 높이로 이동)
+            // Category Label - tagLabel과 같은 높이, tagLabel 오른쪽에 위치
             categoryLabel.leadingAnchor.constraint(equalTo: tagLabel.trailingAnchor, constant: 6),
             categoryLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
             categoryLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 40),
             categoryLabel.heightAnchor.constraint(equalToConstant: 20),
             
-            // Date Label - 태그 아래로 이동
-            dateLabel.leadingAnchor.constraint(equalTo: postImageView.trailingAnchor, constant: 12),
-            dateLabel.topAnchor.constraint(equalTo: tagLabel.bottomAnchor, constant: 4),
-            dateLabel.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -12),
-            
-            // Participants Label - 카테고리와 같은 높이
+            // Participants Label - 맨 오른쪽, tagLabel과 categoryLabel과 같은 높이
             participantsLabel.trailingAnchor.constraint(equalTo: favoriteButton.leadingAnchor, constant: -12),
             participantsLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12)
         ])
