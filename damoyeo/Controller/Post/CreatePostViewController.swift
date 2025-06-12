@@ -477,12 +477,36 @@ class CreatePostViewController: UIViewController {
             ]
             
             let db = Firestore.firestore()
-            db.collection("posts").addDocument(data: postData) { error in
-                DispatchQueue.main.async {
-                    if let error = error {
+            
+            // 1. 게시물 문서 참조 생성 (ID 미리 생성)
+            let postRef = db.collection("posts").document()
+            let postId = postRef.documentID
+            
+            // 2. 게시물 생성
+            postRef.setData(postData) { error in
+                if let error = error {
+                    DispatchQueue.main.async {
                         self.showAlert(message: "게시물 작성 실패: \(error.localizedDescription)")
                         self.resetSubmitButton()
-                    } else {
+                    }
+                    return
+                }
+                
+                // 3. 작성자를 참가자로 자동 추가
+                let proposerData: [String: Any] = [
+                    "user_id": userId,
+                    "createdAt": Timestamp(date: Date())
+                ]
+                
+                postRef.collection("proposers").document(userId).setData(proposerData) { error in
+                    DispatchQueue.main.async {
+                        if let error = error {
+                            print("참가자 자동 등록 실패: \(error)")
+                            // 게시물은 생성되었으니 성공으로 처리
+                        } else {
+                            print("✅ 작성자가 참가자로 자동 등록되었습니다")
+                        }
+                        
                         self.showSuccessAlert()
                     }
                 }
