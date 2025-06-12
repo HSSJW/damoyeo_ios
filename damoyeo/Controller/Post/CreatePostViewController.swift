@@ -10,6 +10,7 @@ import FirebaseAuth
 import FirebaseFirestore
 import FirebaseStorage
 import PhotosUI
+import WebKit
 
 class CreatePostViewController: UIViewController {
     
@@ -306,21 +307,27 @@ class CreatePostViewController: UIViewController {
         }
     }
     
+    // addressButtonTapped 메서드 수정
     @objc private func addressButtonTapped() {
-        let alert = UIAlertController(title: "주소 입력", message: "주소를 직접 입력해주세요.", preferredStyle: .alert)
+        showDaumAddressSearch()
+    }
+
+    // Daum 우편번호 서비스 사용
+    private func showDaumAddressSearch() {
+        print("주소 검색 시작")
+        let addressSearchVC = DaumAddressSearchViewController()
         
-        alert.addTextField { textField in
-            textField.placeholder = "예: 서울특별시 강남구 테헤란로 123"
+        addressSearchVC.onAddressSelected = { [weak self] address in
+            DispatchQueue.main.async {
+                
+                self?.addressTextField.text = address
+                
+            }
         }
         
-        alert.addAction(UIAlertAction(title: "취소", style: .cancel))
-        alert.addAction(UIAlertAction(title: "확인", style: .default) { _ in
-            if let address = alert.textFields?.first?.text, !address.isEmpty {
-                self.addressTextField.text = address
-            }
-        })
-        
-        present(alert, animated: true)
+        let navController = UINavigationController(rootViewController: addressSearchVC)
+        navController.modalPresentationStyle = .pageSheet
+        present(navController, animated: true)
     }
     
     // CreatePostViewController.swift에서 이 부분만 수정
