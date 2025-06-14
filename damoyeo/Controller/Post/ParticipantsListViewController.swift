@@ -4,11 +4,33 @@ import FirebaseAuth
 
 class ParticipantsListViewController: UIViewController {
     
-    private let tableView = UITableView()
+    // MARK: - Properties
     private let postId: String
     private let participantsCount: Int
     private var participants: [(userId: String, nickname: String, profileImage: String?)] = []
     
+    // 채팅 콜백
+    var onParticipantChatTapped: ((String) -> Void)?
+    
+    // MARK: - UI Components
+    private let tableView: UITableView = {
+        let tableView = UITableView()
+        tableView.translatesAutoresizingMaskIntoConstraints = false
+        return tableView
+    }()
+    
+    private let emptyLabel: UILabel = {
+        let label = UILabel()
+        label.text = "참여한 인원이 없습니다."
+        label.textColor = .systemGray
+        label.textAlignment = .center
+        label.font = .systemFont(ofSize: 16)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.isHidden = true
+        return label
+    }()
+    
+    // MARK: - Initialization
     init(postId: String, participantsCount: Int) {
         self.postId = postId
         self.participantsCount = participantsCount
@@ -19,125 +41,182 @@ class ParticipantsListViewController: UIViewController {
         fatalError("init(coder:) has not been implemented")
     }
     
+    // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
         setupUI()
         loadParticipants()
     }
     
+    // MARK: - UI Setup
     private func setupUI() {
         view.backgroundColor = .systemBackground
         title = "참여 인원 목록"
         
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
-            barButtonSystemItem: .done,
+        // 네비게이션 바 설정
+        navigationItem.leftBarButtonItem = UIBarButtonItem(
+            barButtonSystemItem: .cancel,
             target: self,
-            action: #selector(doneButtonTapped)
+            action: #selector(dismissViewController)
         )
         
+        // 테이블뷰 설정
         tableView.delegate = self
         tableView.dataSource = self
-        tableView.register(ParticipantTableViewCell.self, forCellReuseIdentifier: "ParticipantCell")
+        tableView.register(ParticipantCell.self, forCellReuseIdentifier: "ParticipantCell")
+        tableView.rowHeight = 70
         
+        // 뷰 추가
         view.addSubview(tableView)
-        tableView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(emptyLabel)
         
+        // 제약조건 설정
         NSLayoutConstraint.activate([
             tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+            tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            
+            emptyLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            emptyLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor)
         ])
     }
     
+    // MARK: - Data Loading
     private func loadParticipants() {
         let db = Firestore.firestore()
         
-        // proposers 컬렉션에서 참가자 목록 가져오기
+        // 참가자 목록 가져오기
         db.collection("posts").document(postId).collection("proposers").getDocuments { [weak self] snapshot, error in
-            guard let documents = snapshot?.documents else {
-                print("참가자 목록 로드 실패: \(error?.localizedDescription ?? "Unknown error")")
+            if let error = error {
+                print("Error loading participants: \(error)")
                 return
             }
             
-            let group = DispatchGroup()
-            var loadedParticipants: [(String, String, String?)] = []
-            
-            for document in documents {
-                guard let userId = document.data()["user_id"] as? String else { continue }
-                
-                group.enter()
-                
-                // 각 참가자의 사용자 정보 가져오기
-                db.collection("users").document(userId).getDocument { userDoc, error in
-                    defer { group.leave() }
-                    
-                    guard let userData = userDoc?.data() else { return }
-                    
-                    let nickname = userData["user_nickname"] as? String ?? "닉네임 없음"
-                    let profileImage = userData["profile_image"] as? String
-                    
-                    loadedParticipants.append((userId, nickname, profileImage))
+            guard let documents = snapshot?.documents else {
+                DispatchQueue.main.async {
+                    self?.updateEmptyState()
                 }
+                return
             }
             
-            group.notify(queue: .main) {
-                self?.participants = loadedParticipants
-                self?.tableView.reloadData()
-            }
+            let userIds = documents.compactMap { $0.data()["user_id"] as? String }
+            self?.loadUserDetails(for: userIds)
         }
     }
     
-    @objc private func doneButtonTapped() {
+    private func loadUserDetails(for userIds: [String]) {
+        guard !userIds.isEmpty else {
+            DispatchQueue.main.async {
+                self.updateEmptyState()
+            }
+            return
+        }
+        
+        let db = Firestore.firestore()
+        let group = DispatchGroup()
+        var loadedParticipants: [(userId: String, nickname: String, profileImage: String?)] = []
+        
+        for userId in userIds {
+            group.enter()
+            
+            db.collection("users").document(userId).getDocument { document, error in
+                defer { group.leave() }
+                
+                if let error = error {
+                    print("Error loading user \(userId): \(error)")
+                    return
+                }
+                
+                guard let document = document, document.exists else {
+                    print("User document does not exist: \(userId)")
+                    return
+                }
+                
+                let data = document.data()
+                let nickname = data?["user_nickname"] as? String ?? "사용자"
+                let profileImage = data?["profile_image"] as? String
+                
+                loadedParticipants.append((
+                    userId: userId,
+                    nickname: nickname,
+                    profileImage: profileImage
+                ))
+            }
+        }
+        
+        group.notify(queue: .main) {
+            self.participants = loadedParticipants.sorted { $0.nickname < $1.nickname }
+            self.tableView.reloadData()
+            self.updateEmptyState()
+        }
+    }
+    
+    private func updateEmptyState() {
+        let isEmpty = participants.isEmpty
+        emptyLabel.isHidden = !isEmpty
+        tableView.isHidden = isEmpty
+    }
+    
+    // MARK: - Actions
+    @objc private func dismissViewController() {
         dismiss(animated: true)
     }
 }
 
-// MARK: - ParticipantsListViewController Extensions
-extension ParticipantsListViewController: UITableViewDataSource, UITableViewDelegate {
-    
+// MARK: - UITableViewDataSource
+extension ParticipantsListViewController: UITableViewDataSource {
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        if participants.isEmpty {
-            // 빈 상태 표시
-            let emptyLabel = UILabel()
-            emptyLabel.text = "참여 인원이 없습니다"
-            emptyLabel.textAlignment = .center
-            emptyLabel.textColor = .systemGray
-            tableView.backgroundView = emptyLabel
-        } else {
-            tableView.backgroundView = nil
-        }
-        
         return participants.count
     }
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "ParticipantCell", for: indexPath) as! ParticipantTableViewCell
+        let cell = tableView.dequeueReusableCell(withIdentifier: "ParticipantCell", for: indexPath) as! ParticipantCell
         let participant = participants[indexPath.row]
-        cell.configure(userId: participant.userId, nickname: participant.nickname, profileImage: participant.profileImage)
+        
+        cell.configure(
+            nickname: participant.nickname,
+            profileImageUrl: participant.profileImage,
+            onChatTapped: { [weak self] in
+                self?.onParticipantChatTapped?(participant.userId)
+            }
+        )
+        
         return cell
-    }
-    
-    func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
-        return 60
     }
 }
 
-// MARK: - 참가자 테이블뷰 셀
-class ParticipantTableViewCell: UITableViewCell {
+// MARK: - UITableViewDelegate
+extension ParticipantsListViewController: UITableViewDelegate {
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        
+        let participant = participants[indexPath.row]
+        
+        // 사용자 프로필로 이동하거나 추가 정보 표시
+        // TODO: 필요시 구현
+        print("Selected participant: \(participant.nickname)")
+    }
+}
+
+// MARK: - ParticipantCell
+class ParticipantCell: UITableViewCell {
     
+    // MARK: - UI Components
     private let profileImageView: UIImageView = {
         let imageView = UIImageView()
         imageView.contentMode = .scaleAspectFill
         imageView.clipsToBounds = true
         imageView.backgroundColor = .systemGray5
-        imageView.layer.cornerRadius = 20
+        imageView.layer.cornerRadius = 25
+        imageView.translatesAutoresizingMaskIntoConstraints = false
         return imageView
     }()
     
     private let nicknameLabel: UILabel = {
         let label = UILabel()
         label.font = .systemFont(ofSize: 16, weight: .medium)
+        label.translatesAutoresizingMaskIntoConstraints = false
         return label
     }()
     
@@ -145,11 +224,13 @@ class ParticipantTableViewCell: UITableViewCell {
         let button = UIButton(type: .system)
         button.setImage(UIImage(systemName: "message"), for: .normal)
         button.tintColor = .systemBlue
+        button.translatesAutoresizingMaskIntoConstraints = false
         return button
     }()
     
-    private var userId: String?
+    private var onChatTapped: (() -> Void)?
     
+    // MARK: - Initialization
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
         setupUI()
@@ -159,22 +240,21 @@ class ParticipantTableViewCell: UITableViewCell {
         fatalError("init(coder:) has not been implemented")
     }
     
+    // MARK: - UI Setup
     private func setupUI() {
-        selectionStyle = .none
-        
-        [profileImageView, nicknameLabel, chatButton].forEach {
-            contentView.addSubview($0)
-            $0.translatesAutoresizingMaskIntoConstraints = false
-        }
+        contentView.addSubview(profileImageView)
+        contentView.addSubview(nicknameLabel)
+        contentView.addSubview(chatButton)
         
         NSLayoutConstraint.activate([
             profileImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             profileImageView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
-            profileImageView.widthAnchor.constraint(equalToConstant: 40),
-            profileImageView.heightAnchor.constraint(equalToConstant: 40),
+            profileImageView.widthAnchor.constraint(equalToConstant: 50),
+            profileImageView.heightAnchor.constraint(equalToConstant: 50),
             
             nicknameLabel.leadingAnchor.constraint(equalTo: profileImageView.trailingAnchor, constant: 12),
             nicknameLabel.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            nicknameLabel.trailingAnchor.constraint(lessThanOrEqualTo: chatButton.leadingAnchor, constant: -12),
             
             chatButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             chatButton.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
@@ -185,34 +265,51 @@ class ParticipantTableViewCell: UITableViewCell {
         chatButton.addTarget(self, action: #selector(chatButtonTapped), for: .touchUpInside)
     }
     
-    func configure(userId: String, nickname: String, profileImage: String?) {
-        self.userId = userId
+    // MARK: - Configuration
+    func configure(nickname: String, profileImageUrl: String?, onChatTapped: @escaping () -> Void) {
         nicknameLabel.text = nickname
-        
-        // 기본 프로필 이미지
-        profileImageView.image = UIImage(systemName: "person.crop.circle.fill")
-        profileImageView.tintColor = .systemGray3
+        self.onChatTapped = onChatTapped
         
         // 프로필 이미지 로드
-        if let profileImageUrl = profileImage, !profileImageUrl.isEmpty, let url = URL(string: profileImageUrl) {
-            URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
-                guard let data = data, error == nil, let image = UIImage(data: data) else { return }
-                
+        if let profileImageUrl = profileImageUrl, !profileImageUrl.isEmpty {
+            loadProfileImage(from: profileImageUrl)
+        } else {
+            profileImageView.image = UIImage(systemName: "person.crop.circle.fill")
+            profileImageView.tintColor = .systemGray3
+        }
+    }
+    
+    private func loadProfileImage(from urlString: String) {
+        guard let url = URL(string: urlString) else {
+            profileImageView.image = UIImage(systemName: "person.crop.circle.fill")
+            profileImageView.tintColor = .systemGray3
+            return
+        }
+        
+        URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
+            guard let data = data, error == nil, let image = UIImage(data: data) else {
                 DispatchQueue.main.async {
-                    self?.profileImageView.image = image
+                    self?.profileImageView.image = UIImage(systemName: "person.crop.circle.fill")
+                    self?.profileImageView.tintColor = .systemGray3
                 }
-            }.resume()
-        }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self?.profileImageView.image = image
+            }
+        }.resume()
     }
-
+    
+    // MARK: - Actions
     @objc private func chatButtonTapped() {
-            guard let userId = userId else { return }
-            
-            // TODO: 채팅 기능 구현
-            print("채팅 버튼 탭됨 - 사용자 ID: \(userId)")
-            
-            // 여기에 채팅 기능을 구현하세요
-            // 예시: 채팅방 생성 후 ChatViewController로 이동
-        }
+        onChatTapped?()
     }
-
+    
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        profileImageView.image = nil
+        nicknameLabel.text = nil
+        onChatTapped = nil
+    }
+}

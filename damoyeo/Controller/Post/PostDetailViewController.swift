@@ -545,9 +545,140 @@ class PostDetailViewController: UIViewController {
         }
     }
     
+    // MARK: - 채팅 기능 구현
     @objc private func chatButtonTapped() {
-        print("채팅 버튼 탭됨")
-        // TODO: 채팅 기능 구현
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            showLoginAlert()
+            return
+        }
+        
+        // 본인과는 채팅할 수 없음
+        if authorId == currentUserId {
+            showErrorAlert(message: "본인과는 채팅할 수 없습니다.")
+            return
+        }
+        
+        // 로딩 표시
+        let loadingAlert = UIAlertController(title: "채팅방 생성 중...", message: "잠시만 기다려주세요.", preferredStyle: .alert)
+        present(loadingAlert, animated: true)
+        
+        // 채팅방 생성 또는 기존 채팅방 가져오기
+        createOrGetChatRoom(with: authorId) { [weak self] chatRoomId in
+            DispatchQueue.main.async {
+                // 로딩 알림 닫기
+                loadingAlert.dismiss(animated: true) {
+                    if let chatRoomId = chatRoomId {
+                        // 채팅 상세 화면으로 이동
+                        self?.navigateToChatDetail(chatRoomId: chatRoomId, otherUserId: self?.authorId ?? "")
+                    } else {
+                        self?.showErrorAlert(message: "채팅방 생성에 실패했습니다.")
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - 채팅방 생성/가져오기
+    private func createOrGetChatRoom(with otherUserId: String, completion: @escaping (String?) -> Void) {
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            completion(nil)
+            return
+        }
+        
+        let db = Firestore.firestore()
+        
+        // 기존 채팅방 확인
+        db.collection("chats")
+            .whereField("users", arrayContains: currentUserId)
+            .getDocuments { snapshot, error in
+                
+                if let error = error {
+                    print("Error checking existing chat rooms: \(error)")
+                    completion(nil)
+                    return
+                }
+                
+                // 상대방과의 기존 채팅방 찾기
+                for document in snapshot?.documents ?? [] {
+                    let users = document.data()["users"] as? [String] ?? []
+                    if users.contains(otherUserId) {
+                        completion(document.documentID)
+                        return
+                    }
+                }
+                
+                // 새 채팅방 생성
+                let chatRoomId = UUID().uuidString
+                let newChatRoom = ChatRoom(
+                    id: chatRoomId,
+                    users: [currentUserId, otherUserId],
+                    lastMessage: "",
+                    timestamp: Date(),
+                    pinned: false
+                )
+                
+                db.collection("chats").document(chatRoomId).setData(newChatRoom.toDictionary()) { error in
+                    if let error = error {
+                        print("Error creating new chat room: \(error)")
+                        completion(nil)
+                    } else {
+                        completion(chatRoomId)
+                    }
+                }
+            }
+    }
+
+    // MARK: - 채팅 상세 화면으로 이동
+    private func navigateToChatDetail(chatRoomId: String, otherUserId: String) {
+        let chatDetailVC = ChatDetailViewController()
+        chatDetailVC.chatId = chatRoomId
+        chatDetailVC.otherUserId = otherUserId
+        
+        // 네비게이션 스택에 추가
+        navigationController?.pushViewController(chatDetailVC, animated: true)
+    }
+
+    // MARK: - 참여자 목록에서 채팅 기능도 추가
+    private func showParticipantsList() {
+        let participantsListVC = ParticipantsListViewController(postId: post.id, participantsCount: participantsCount)
+        
+        // 참여자와 채팅할 수 있는 콜백 추가
+        participantsListVC.onParticipantChatTapped = { [weak self] userId in
+            self?.startChatWithUser(userId: userId)
+        }
+        
+        let navController = UINavigationController(rootViewController: participantsListVC)
+        present(navController, animated: true)
+    }
+
+    // MARK: - 특정 사용자와 채팅 시작
+    private func startChatWithUser(userId: String) {
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            showLoginAlert()
+            return
+        }
+        
+        // 로딩 표시
+        let loadingAlert = UIAlertController(title: "채팅방 생성 중...", message: "잠시만 기다려주세요.", preferredStyle: .alert)
+        present(loadingAlert, animated: true)
+        
+        // 채팅방 생성 또는 기존 채팅방 가져오기
+        createOrGetChatRoom(with: userId) { [weak self] chatRoomId in
+            DispatchQueue.main.async {
+                // 로딩 알림 닫기
+                loadingAlert.dismiss(animated: true) {
+                    if let chatRoomId = chatRoomId {
+                        // 현재 모달 닫기
+                        self?.presentedViewController?.dismiss(animated: true) {
+                            // 채팅 상세 화면으로 이동
+                            self?.navigateToChatDetail(chatRoomId: chatRoomId, otherUserId: userId)
+                        }
+                    } else {
+                        self?.showErrorAlert(message: "채팅방 생성에 실패했습니다.")
+                    }
+                }
+            }
+        }
     }
     
     @objc private func menuButtonTapped() {
@@ -618,12 +749,6 @@ class PostDetailViewController: UIViewController {
                 }
             }
         }
-    }
-    
-    private func showParticipantsList() {
-        let participantsListVC = ParticipantsListViewController(postId: post.id, participantsCount: participantsCount)
-        let navController = UINavigationController(rootViewController: participantsListVC)
-        present(navController, animated: true)
     }
     
     
