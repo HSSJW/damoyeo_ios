@@ -1,36 +1,39 @@
-//
-//  PostTableViewCell.swift
-//  damoyeo
-//
-//  Created by 송진우 on 6/8/25.
-//
-
 import UIKit
-import FirebaseAuth
 import FirebaseFirestore
+import FirebaseAuth
+
+protocol PostTableViewCellDelegate: AnyObject {
+    func postCell(_ cell: PostTableViewCell, didToggleFavoriteFor post: Post)
+}
 
 class PostTableViewCell: UITableViewCell {
+    
+    // MARK: - Properties
+    weak var delegate: PostTableViewCellDelegate?
+    private var post: Post?
+    private var isFavorited = false
+    private var participantsCount = 0
     
     // MARK: - UI Components
     private let postImageView: UIImageView = {
         let imageView = UIImageView()
         imageView.contentMode = .scaleAspectFill
         imageView.clipsToBounds = true
-        imageView.backgroundColor = .systemGray5
+        imageView.backgroundColor = .systemGray6
         imageView.layer.cornerRadius = 8
         return imageView
     }()
     
     private let titleLabel: UILabel = {
         let label = UILabel()
-        label.font = .systemFont(ofSize: 14, weight: .semibold)
+        label.font = .systemFont(ofSize: 16, weight: .semibold)
         label.numberOfLines = 2
         return label
     }()
     
     private let contentLabel: UILabel = {
         let label = UILabel()
-        label.font = .systemFont(ofSize: 12)
+        label.font = .systemFont(ofSize: 14)
         label.textColor = .systemGray
         label.numberOfLines = 2
         return label
@@ -39,22 +42,7 @@ class PostTableViewCell: UITableViewCell {
     private let tagLabel: UILabel = {
         let label = UILabel()
         label.font = .systemFont(ofSize: 12)
-        label.textColor = .systemBlue
-        label.backgroundColor = .systemBlue.withAlphaComponent(0.1)
-        label.textAlignment = .center
-        label.layer.cornerRadius = 4
-        label.clipsToBounds = true
-        return label
-    }()
-    
-    private let categoryLabel: UILabel = {
-        let label = UILabel()
-        label.font = .systemFont(ofSize: 12)
-        label.textColor = .systemOrange
-        label.backgroundColor = .systemOrange.withAlphaComponent(0.1)
-        label.textAlignment = .center
-        label.layer.cornerRadius = 4
-        label.clipsToBounds = true
+        label.textColor = .systemGray
         return label
     }()
     
@@ -65,273 +53,111 @@ class PostTableViewCell: UITableViewCell {
         return label
     }()
     
-    private let dateLabel: UILabel = {
-        let label = UILabel()
-        label.font = .systemFont(ofSize: 12)
-        label.textColor = .systemGray2
-        return label
-    }()
-    
-    // 좋아요 버튼
     private let favoriteButton: UIButton = {
-        let button = UIButton(type: .custom)  // .system 대신 .custom 사용
-        
-        // Configuration 사용
-        var config = UIButton.Configuration.plain()
-        config.image = UIImage(systemName: "heart")
-        config.baseForegroundColor = .systemGray4
-        config.background.backgroundColor = .clear  // 배경색 명시적으로 clear
-        
-        button.configuration = config
-        button.backgroundColor = .clear  // 추가 안전장치
-        
+        let button = UIButton(type: .system)
+        button.setImage(UIImage(systemName: "heart"), for: .normal)
+        button.tintColor = .systemRed
         return button
     }()
-    
-    // MARK: - Properties
-    private var currentPost: Post?
-    private var isLiked = false
     
     // MARK: - Initialization
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
         setupUI()
-        setupActions()
     }
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
     
-    // MARK: - UI Setup
-    private func setupUI() {
-        contentView.addSubview(postImageView)
-        contentView.addSubview(titleLabel)
-        contentView.addSubview(contentLabel)
-        contentView.addSubview(tagLabel)
-        contentView.addSubview(categoryLabel)
-        contentView.addSubview(participantsLabel)
-        contentView.addSubview(dateLabel)
-        contentView.addSubview(favoriteButton)
-        
-        setupConstraints()
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        postImageView.image = nil
+        post = nil
+        isFavorited = false
+        participantsCount = 0
     }
     
-    private func setupConstraints() {
-        [postImageView, titleLabel, contentLabel, tagLabel, categoryLabel,
-         participantsLabel, dateLabel, favoriteButton].forEach {
+    // MARK: - UI Setup
+    private func setupUI() {
+        selectionStyle = .none
+        
+        [postImageView, titleLabel, contentLabel, tagLabel, participantsLabel, favoriteButton].forEach {
+            contentView.addSubview($0)
             $0.translatesAutoresizingMaskIntoConstraints = false
         }
         
         NSLayoutConstraint.activate([
-            // Post Image
+            // 이미지
             postImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             postImageView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
+            postImageView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
             postImageView.widthAnchor.constraint(equalToConstant: 80),
             postImageView.heightAnchor.constraint(equalToConstant: 80),
             
-            // Favorite Button
+            // 좋아요 버튼
             favoriteButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             favoriteButton.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
-            favoriteButton.widthAnchor.constraint(equalToConstant: 30),
-            favoriteButton.heightAnchor.constraint(equalToConstant: 30),
+            favoriteButton.widthAnchor.constraint(equalToConstant: 44),
+            favoriteButton.heightAnchor.constraint(equalToConstant: 44),
             
-            // Title Label
+            // 제목
             titleLabel.leadingAnchor.constraint(equalTo: postImageView.trailingAnchor, constant: 12),
+            titleLabel.trailingAnchor.constraint(equalTo: favoriteButton.leadingAnchor, constant: -8),
             titleLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
-            titleLabel.trailingAnchor.constraint(equalTo: favoriteButton.leadingAnchor, constant: -12),
             
-            // Content Label
+            // 내용
             contentLabel.leadingAnchor.constraint(equalTo: postImageView.trailingAnchor, constant: 12),
+            contentLabel.trailingAnchor.constraint(equalTo: favoriteButton.leadingAnchor, constant: -8),
             contentLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
-            contentLabel.trailingAnchor.constraint(equalTo: favoriteButton.leadingAnchor, constant: -12),
             
-            // Date Label - contentLabel 바로 아래로 이동
-            dateLabel.leadingAnchor.constraint(equalTo: postImageView.trailingAnchor, constant: 12),
-            dateLabel.topAnchor.constraint(equalTo: contentLabel.bottomAnchor, constant: 8),
-            
-            // Tag Label - dateLabel 아래, 하단에 위치 (categoryLabel과 같은 높이)
+            // 지역
             tagLabel.leadingAnchor.constraint(equalTo: postImageView.trailingAnchor, constant: 12),
-            tagLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
-            tagLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 50),
-            tagLabel.heightAnchor.constraint(equalToConstant: 20),
+            tagLabel.topAnchor.constraint(equalTo: contentLabel.bottomAnchor, constant: 4),
             
-            // Category Label - tagLabel과 같은 높이, tagLabel 오른쪽에 위치
-            categoryLabel.leadingAnchor.constraint(equalTo: tagLabel.trailingAnchor, constant: 6),
-            categoryLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
-            categoryLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 40),
-            categoryLabel.heightAnchor.constraint(equalToConstant: 20),
-            
-            // Participants Label - 맨 오른쪽, tagLabel과 categoryLabel과 같은 높이
-            participantsLabel.trailingAnchor.constraint(equalTo: favoriteButton.leadingAnchor, constant: -12),
-            participantsLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12)
+            // 참여인원
+            participantsLabel.leadingAnchor.constraint(equalTo: postImageView.trailingAnchor, constant: 12),
+            participantsLabel.topAnchor.constraint(equalTo: tagLabel.bottomAnchor, constant: 2),
+            participantsLabel.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -12)
         ])
-    }
-    
-    private func setupActions() {
+        
         favoriteButton.addTarget(self, action: #selector(favoriteButtonTapped), for: .touchUpInside)
     }
     
     // MARK: - Configuration
     func configure(with post: Post) {
-        currentPost = post
+        self.post = post
+        
         titleLabel.text = post.title
         
-        // 내용 요약 표시
-        let maxLength = 50
-        if post.content.count > maxLength {
-            let index = post.content.index(post.content.startIndex, offsetBy: maxLength)
+        // 내용이 너무 길면 자르기
+        if post.content.count > 50 {
+            let index = post.content.index(post.content.startIndex, offsetBy: 50)
             contentLabel.text = String(post.content[..<index]) + "..."
         } else {
             contentLabel.text = post.content
         }
         
-        tagLabel.text = " \(post.tag) "  // 양옆에 여백 추가
-        categoryLabel.text = " \(post.category) "  // 양옆에 여백 추가
+        tagLabel.text = "지역: \(post.tag)"
         
-        // 날짜 포맷팅
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MM/dd HH:mm"
-        dateLabel.text = formatter.string(from: post.meetingTime)
+        // 이미지 로드
+        loadImage(from: post.imageUrls.first ?? post.imageUrl)
         
-        // 이미지 설정
-        if !post.imageUrls.isEmpty {
-            loadImage(from: post.imageUrls.first!)
-        } else {
-            postImageView.image = UIImage(systemName: "photo")
-            postImageView.tintColor = .systemGray3
-        }
-        
-        // 로그인 상태에 따라 좋아요 버튼 표시/숨김
-        favoriteButton.isHidden = Auth.auth().currentUser == nil
-        
-        // 참가자 수와 좋아요 상태 로드
-        loadParticipantsCount()
+        // 좋아요 상태 및 참여인원 로드
         loadFavoriteStatus()
-    }
-    
-    // MARK: - Firebase Methods
-    private func loadParticipantsCount() {
-        guard let post = currentPost else { return }
-        
-        let db = Firestore.firestore()
-        db.collection("posts").document(post.id).collection("proposers").getDocuments { [weak self] snapshot, error in
-            DispatchQueue.main.async {
-                let count = snapshot?.documents.count ?? 0
-                // 새로운 형식으로 변경: "참가인원 : (1/5)"
-                self?.participantsLabel.text = "참가인원 : (\(count)/\(post.recruit))"
-            }
-        }
-    }
-    
-    private func loadFavoriteStatus() {
-        guard let post = currentPost,
-              let currentUserId = Auth.auth().currentUser?.uid else { return }
-        
-        let db = Firestore.firestore()
-        db.collection("posts").document(post.id).collection("favorite").document(currentUserId).getDocument { [weak self] document, error in
-            DispatchQueue.main.async {
-                self?.isLiked = document?.exists ?? false
-                self?.updateFavoriteButtonAppearance()
-            }
-        }
-    }
-    
-    // 좋아요 버튼 색상 업데이트 메서드 추가
-    private func updateFavoriteButtonAppearance() {
-        var config = favoriteButton.configuration
-        
-        if isLiked {
-            config?.image = UIImage(systemName: "heart.fill")
-            config?.baseForegroundColor = .systemRed
-        } else {
-            config?.image = UIImage(systemName: "heart")
-            config?.baseForegroundColor = .systemGray4
-        }
-        
-        favoriteButton.configuration = config
-    }
-    
-    // MARK: - Actions
-    @objc private func favoriteButtonTapped() {
-        guard let post = currentPost,
-              let currentUserId = Auth.auth().currentUser?.uid else {
-            print("로그인이 필요합니다.")
-            return
-        }
-        
-        // 버튼 비활성화 (중복 탭 방지)
-        favoriteButton.isEnabled = false
-        
-        let db = Firestore.firestore()
-        let favoriteRef = db.collection("posts").document(post.id).collection("favorite").document(currentUserId)
-        
-        if isLiked {
-            // 좋아요 취소
-            favoriteRef.delete { [weak self] error in
-                DispatchQueue.main.async {
-                    self?.favoriteButton.isEnabled = true
-                    
-                    if let error = error {
-                        print("좋아요 취소 실패: \(error.localizedDescription)")
-                        return
-                    }
-                    
-                    self?.isLiked = false
-                    self?.updateFavoriteButtonAppearance()
-                    
-                    // 애니메이션 효과
-                    UIView.animate(withDuration: 0.1, animations: {
-                        self?.favoriteButton.transform = CGAffineTransform(scaleX: 0.8, y: 0.8)
-                    }) { _ in
-                        UIView.animate(withDuration: 0.1) {
-                            self?.favoriteButton.transform = .identity
-                        }
-                    }
-                }
-            }
-        } else {
-            // 좋아요 추가
-            favoriteRef.setData([
-                "user_id": currentUserId,
-                "createdAt": Timestamp()
-            ]) { [weak self] error in
-                DispatchQueue.main.async {
-                    self?.favoriteButton.isEnabled = true
-                    
-                    if let error = error {
-                        print("좋아요 추가 실패: \(error.localizedDescription)")
-                        return
-                    }
-                    
-                    self?.isLiked = true
-                    self?.updateFavoriteButtonAppearance()
-                    
-                    // 애니메이션 효과
-                    UIView.animate(withDuration: 0.1, animations: {
-                        self?.favoriteButton.transform = CGAffineTransform(scaleX: 1.2, y: 1.2)
-                    }) { _ in
-                        UIView.animate(withDuration: 0.1) {
-                            self?.favoriteButton.transform = .identity
-                        }
-                    }
-                }
-            }
-        }
+        loadParticipantsCount()
     }
     
     private func loadImage(from urlString: String) {
-        guard let url = URL(string: urlString) else {
-            postImageView.image = UIImage(systemName: "photo")
-            postImageView.tintColor = .systemGray3
+        guard !urlString.isEmpty, let url = URL(string: urlString) else {
+            postImageView.image = UIImage(systemName: "photo.fill")
             return
         }
         
         URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
-            guard let data = data, let image = UIImage(data: data) else {
+            guard let data = data, error == nil, let image = UIImage(data: data) else {
                 DispatchQueue.main.async {
-                    self?.postImageView.image = UIImage(systemName: "photo")
-                    self?.postImageView.tintColor = .systemGray3
+                    self?.postImageView.image = UIImage(systemName: "photo.fill")
                 }
                 return
             }
@@ -342,24 +168,92 @@ class PostTableViewCell: UITableViewCell {
         }.resume()
     }
     
-    override func prepareForReuse() {
-        super.prepareForReuse()
-        postImageView.image = nil
-        titleLabel.text = nil
-        contentLabel.text = nil
-        tagLabel.text = nil
-        categoryLabel.text = nil
-        participantsLabel.text = nil
-        dateLabel.text = nil
+    private func loadFavoriteStatus() {
+        guard let post = post, let currentUserId = Auth.auth().currentUser?.uid else {
+            updateFavoriteButton()
+            return
+        }
         
-        // 버튼 초기화
-        var config = favoriteButton.configuration
-        config?.image = UIImage(systemName: "heart")
-        config?.baseForegroundColor = .systemGray4
-        favoriteButton.configuration = config
+        let db = Firestore.firestore()
+        db.collection("posts").document(post.id).collection("favorite").document(currentUserId).getDocument { [weak self] document, error in
+            DispatchQueue.main.async {
+                self?.isFavorited = document?.exists ?? false
+                self?.updateFavoriteButton()
+            }
+        }
+    }
+    
+    private func loadParticipantsCount() {
+        guard let post = post else { return }
         
-        isLiked = false
-        currentPost = nil
-        favoriteButton.isEnabled = true
+        let db = Firestore.firestore()
+        db.collection("posts").document(post.id).collection("proposers").getDocuments { [weak self] snapshot, error in
+            DispatchQueue.main.async {
+                self?.participantsCount = snapshot?.documents.count ?? 0
+                self?.updateParticipantsLabel()
+            }
+        }
+    }
+    
+    private func updateFavoriteButton() {
+        let imageName = isFavorited ? "heart.fill" : "heart"
+        favoriteButton.setImage(UIImage(systemName: imageName), for: .normal)
+    }
+    
+    private func updateParticipantsLabel() {
+        guard let post = post else { return }
+        participantsLabel.text = "참여인원: \(participantsCount)/\(post.recruit)"
+    }
+    
+    // MARK: - Actions
+    @objc private func favoriteButtonTapped() {
+        guard let post = post else { return }
+        
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            // 로그인 필요 알림은 delegate를 통해 처리
+            return
+        }
+        
+        let db = Firestore.firestore()
+        let favoriteRef = db.collection("posts").document(post.id).collection("favorite").document(currentUserId)
+        
+        if isFavorited {
+            // 좋아요 취소
+            favoriteRef.delete { [weak self] error in
+                if let error = error {
+                    print("좋아요 취소 실패: \(error)")
+                    return
+                }
+                
+                DispatchQueue.main.async {
+                    self?.isFavorited = false
+                    self?.updateFavoriteButton()
+                    
+                    if let post = self?.post {
+                        self?.delegate?.postCell(self!, didToggleFavoriteFor: post)
+                    }
+                }
+            }
+        } else {
+            // 좋아요 추가
+            favoriteRef.setData([
+                "user_id": currentUserId,
+                "createdAt": Timestamp(date: Date())
+            ]) { [weak self] error in
+                if let error = error {
+                    print("좋아요 추가 실패: \(error)")
+                    return
+                }
+                
+                DispatchQueue.main.async {
+                    self?.isFavorited = true
+                    self?.updateFavoriteButton()
+                    
+                    if let post = self?.post {
+                        self?.delegate?.postCell(self!, didToggleFavoriteFor: post)
+                    }
+                }
+            }
+        }
     }
 }

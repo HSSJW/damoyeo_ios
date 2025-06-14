@@ -7,6 +7,7 @@
 
 import UIKit
 import FirebaseFirestore
+import FirebaseAuth
 
 class PostDetailViewController: UIViewController {
     
@@ -15,6 +16,8 @@ class PostDetailViewController: UIViewController {
     private var participantsCount = 0
     private var isFavorited = false
     private var favoriteCount = 0
+    private var authorId: String = ""
+    private var isCurrentUserAuthor = false
     
     // MARK: - UI Components
     private let scrollView = UIScrollView()
@@ -142,14 +145,16 @@ class PostDetailViewController: UIViewController {
         super.viewDidLoad()
         setupUI()
         configureWithPost()
+        loadPostDetails()  // 이 메서드 안에서 setupNavigationBar() 호출됨
         loadParticipantsData()
         loadFavoriteData()
-        setupNavigationBar()
+        checkUserFavoriteStatus()
     }
     
     // MARK: - UI Setup
     private func setupUI() {
         view.backgroundColor = .systemBackground
+        title = "게시물 상세" // 네비게이션 타이틀 설정
         
         // ScrollView 설정
         view.addSubview(scrollView)
@@ -279,7 +284,16 @@ class PostDetailViewController: UIViewController {
     }
     
     private func setupNavigationBar() {
-        // TODO: 본인 게시물인 경우 수정/삭제 버튼 추가
+        // 본인 게시물인 경우에만 메뉴 버튼 추가
+        if isCurrentUserAuthor {
+            let menuButton = UIBarButtonItem(
+                image: UIImage(systemName: "ellipsis"),
+                style: .plain,
+                target: self,
+                action: #selector(menuButtonTapped)
+            )
+            navigationItem.rightBarButtonItem = menuButton
+        }
     }
     
     private func configureWithPost() {
@@ -301,17 +315,77 @@ class PostDetailViewController: UIViewController {
         // 카테고리/지역
         categoryTagLabel.text = "\(post.category) • \(post.tag)"
         
-        // 작성자 정보 (임시)
-        authorNameLabel.text = "작성자" // TODO: 실제 작성자 정보 로드
-        
         // 이미지 로딩
         loadImage(from: post.imageUrls.first ?? post.imageUrl)
         
         updateParticipateButton()
     }
     
+    // MARK: - Data Loading
+    private func loadPostDetails() {
+        // Post 모델에서 직접 authorId 가져오기
+        self.authorId = post.authorId
+        
+        // 현재 사용자가 작성자인지 확인
+        if let currentUserId = Auth.auth().currentUser?.uid {
+            self.isCurrentUserAuthor = (self.authorId == currentUserId)
+            self.setupNavigationBar()
+            
+            // 본인 게시물이면 채팅 버튼 숨김
+            self.chatButton.isHidden = self.isCurrentUserAuthor
+        }
+        
+        // 작성자 정보 로드
+        self.loadAuthorInfo()
+    }
+    
+    private func loadAuthorInfo() {
+        guard !authorId.isEmpty else { return }
+        
+        let db = Firestore.firestore()
+        db.collection("users").document(authorId).getDocument { [weak self] document, error in
+            guard let self = self, let document = document, document.exists else {
+                DispatchQueue.main.async {
+                    self?.authorNameLabel.text = "작성자"
+                }
+                return
+            }
+            
+            let data = document.data()
+            let nickname = data?["user_nickname"] as? String ?? "작성자"
+            let profileImageUrl = data?["profile_image"] as? String
+            
+            DispatchQueue.main.async {
+                self.authorNameLabel.text = nickname
+                
+                // 프로필 이미지 로드
+                if let profileImageUrl = profileImageUrl, !profileImageUrl.isEmpty {
+                    self.loadAuthorImage(from: profileImageUrl)
+                }
+            }
+        }
+    }
+    
+    private func loadAuthorImage(from urlString: String) {
+        guard let url = URL(string: urlString) else { return }
+        
+        URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
+            guard let data = data, error == nil, let image = UIImage(data: data) else { return }
+            
+            DispatchQueue.main.async {
+                self?.authorImageView.image = image
+            }
+        }.resume()
+    }
+    
     private func updateParticipateButton() {
-        participateButton.setTitle("참여하기 (\(participantsCount)/\(post.recruit))", for: .normal)
+        if isCurrentUserAuthor {
+            participateButton.setTitle("참여인원 확인 (\(participantsCount)/\(post.recruit))", for: .normal)
+            participateButton.backgroundColor = .systemGray
+        } else {
+            participateButton.setTitle("참여하기 (\(participantsCount)/\(post.recruit))", for: .normal)
+            participateButton.backgroundColor = .systemBlue
+        }
     }
     
     private func loadParticipantsData() {
@@ -332,6 +406,23 @@ class PostDetailViewController: UIViewController {
                 self?.favoriteCountLabel.text = "\(self?.favoriteCount ?? 0)"
             }
         }
+    }
+    
+    private func checkUserFavoriteStatus() {
+        guard let currentUserId = Auth.auth().currentUser?.uid else { return }
+        
+        let db = Firestore.firestore()
+        db.collection("posts").document(post.id).collection("favorite").document(currentUserId).getDocument { [weak self] document, error in
+            DispatchQueue.main.async {
+                self?.isFavorited = document?.exists ?? false
+                self?.updateFavoriteButton()
+            }
+        }
+    }
+    
+    private func updateFavoriteButton() {
+        let imageName = isFavorited ? "heart.fill" : "heart"
+        favoriteButton.setImage(UIImage(systemName: imageName), for: .normal)
     }
     
     private func loadImage(from urlString: String) {
@@ -356,17 +447,164 @@ class PostDetailViewController: UIViewController {
     
     // MARK: - Actions
     @objc private func favoriteButtonTapped() {
-        print("좋아요 버튼 탭됨")
-        // TODO: 좋아요 기능 구현
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            showLoginAlert()
+            return
+        }
+        
+        let db = Firestore.firestore()
+        let favoriteRef = db.collection("posts").document(post.id).collection("favorite").document(currentUserId)
+        
+        if isFavorited {
+            // 좋아요 취소
+            favoriteRef.delete { [weak self] error in
+                if let error = error {
+                    print("좋아요 취소 실패: \(error)")
+                    return
+                }
+                
+                DispatchQueue.main.async {
+                    self?.isFavorited = false
+                    self?.favoriteCount = max(0, (self?.favoriteCount ?? 1) - 1)
+                    self?.updateFavoriteButton()
+                    self?.favoriteCountLabel.text = "\(self?.favoriteCount ?? 0)"
+                }
+            }
+        } else {
+            // 좋아요 추가
+            favoriteRef.setData([
+                "user_id": currentUserId,
+                "createdAt": Timestamp(date: Date())
+            ]) { [weak self] error in
+                if let error = error {
+                    print("좋아요 추가 실패: \(error)")
+                    return
+                }
+                
+                DispatchQueue.main.async {
+                    self?.isFavorited = true
+                    self?.favoriteCount = (self?.favoriteCount ?? 0) + 1
+                    self?.updateFavoriteButton()
+                    self?.favoriteCountLabel.text = "\(self?.favoriteCount ?? 0)"
+                }
+            }
+        }
     }
     
     @objc private func participateButtonTapped() {
-        print("참여하기 버튼 탭됨")
-        // TODO: 참여 기능 구현
+        if isCurrentUserAuthor {
+            // 본인 게시물인 경우 참여인원 목록 표시
+            showParticipantsList()
+        } else {
+            // 다른 사람 게시물인 경우 참여 기능
+            print("참여하기 버튼 탭됨")
+            // TODO: 참여 기능 구현
+        }
     }
     
     @objc private func chatButtonTapped() {
         print("채팅 버튼 탭됨")
         // TODO: 채팅 기능 구현
+    }
+    
+    @objc private func menuButtonTapped() {
+        let alert = UIAlertController(title: "게시물 관리", message: nil, preferredStyle: .actionSheet)
+        
+        alert.addAction(UIAlertAction(title: "수정", style: .default) { [weak self] _ in
+            self?.editPost()
+        })
+        
+        alert.addAction(UIAlertAction(title: "삭제", style: .destructive) { [weak self] _ in
+            self?.showDeleteConfirmation()
+        })
+        
+        alert.addAction(UIAlertAction(title: "취소", style: .cancel))
+        
+        // iPad 대응
+        if let popover = alert.popoverPresentationController {
+            popover.barButtonItem = navigationItem.rightBarButtonItem
+        }
+        
+        present(alert, animated: true)
+    }
+    
+    private func editPost() {
+        let createPostVC = CreatePostViewController()
+        createPostVC.setEditMode(with: post) // 수정 모드로 설정
+        let navController = UINavigationController(rootViewController: createPostVC)
+        navController.modalPresentationStyle = .fullScreen
+        present(navController, animated: true)
+    }
+    
+    private func showDeleteConfirmation() {
+        let alert = UIAlertController(
+            title: "게시물 삭제",
+            message: "정말로 이 게시물을 삭제하시겠습니까?\n삭제된 게시물은 복구할 수 없습니다.",
+            preferredStyle: .alert
+        )
+        
+        alert.addAction(UIAlertAction(title: "취소", style: .cancel))
+        alert.addAction(UIAlertAction(title: "삭제", style: .destructive) { [weak self] _ in
+            self?.deletePost()
+        })
+        
+        present(alert, animated: true)
+    }
+    
+    private func deletePost() {
+        let db = Firestore.firestore()
+        
+        // 간단한 로딩 메시지 표시
+        let loadingAlert = UIAlertController(title: "삭제 중...", message: "잠시만 기다려주세요.", preferredStyle: .alert)
+        present(loadingAlert, animated: true)
+        
+        // 게시물 삭제
+        db.collection("posts").document(post.id).delete { [weak self] error in
+            DispatchQueue.main.async {
+                // 로딩 알림 닫기
+                loadingAlert.dismiss(animated: true) {
+                    if let error = error {
+                        self?.showErrorAlert(message: "게시물 삭제에 실패했습니다: \(error.localizedDescription)")
+                        return
+                    }
+                    
+                    // 삭제 성공
+                    self?.showSuccessAlert(message: "게시물이 삭제되었습니다.") {
+                        self?.navigationController?.popViewController(animated: true)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func showParticipantsList() {
+        // TODO: 참여인원 목록 표시 기능 구현
+        let alert = UIAlertController(title: "참여인원 목록", message: "현재 \(participantsCount)명이 참여 중입니다.", preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "확인", style: .default))
+        present(alert, animated: true)
+    }
+    
+    private func showLoginAlert() {
+        let alert = UIAlertController(
+            title: "로그인 필요",
+            message: "이 기능을 사용하려면 로그인이 필요합니다.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "확인", style: .default))
+        present(alert, animated: true)
+    }
+    
+    private func showErrorAlert(message: String) {
+        let alert = UIAlertController(title: "오류", message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "확인", style: .default))
+        present(alert, animated: true)
+    }
+    
+    private func showSuccessAlert(message: String, completion: @escaping () -> Void) {
+        let alert = UIAlertController(title: "완료", message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "확인", style: .default) { _ in
+            completion()
+        })
+        present(alert, animated: true)
     }
 }

@@ -18,6 +18,11 @@ class CreatePostViewController: UIViewController {
     private let scrollView = UIScrollView()
     private let contentView = UIView()
     
+    // 수정관련 코드
+    private var isEditMode = false
+    private var editingPost: Post?
+    
+    
     private let titleTextField: UITextField = {
         let textField = UITextField()
         textField.borderStyle = .roundedRect
@@ -148,12 +153,25 @@ class CreatePostViewController: UIViewController {
         setupNavigationBar()
         setupActions()
         setupImageCollection()
+        
+        // 수정 모드인 경우 기존 데이터 로드
+        if isEditMode, let post = editingPost {
+            loadPostData(post)
+        }
     }
+    
+    
+    // 수정모드
+    func setEditMode(with post: Post) {
+        isEditMode = true
+        editingPost = post
+    }
+
     
     // MARK: - UI Setup
     private func setupUI() {
         view.backgroundColor = .systemBackground
-        title = "모집글 작성"
+        title = isEditMode ? "모집글 수정" : "모집글 작성"
         
         view.addSubview(scrollView)
         scrollView.addSubview(contentView)
@@ -165,6 +183,70 @@ class CreatePostViewController: UIViewController {
         }
         
         setupConstraints()
+    }
+    
+    // MARK: - 기존 게시물 데이터 로드
+    private func loadPostData(_ post: Post) {
+        titleTextField.text = post.title
+        contentTextView.text = post.content
+        contentTextView.textColor = .label
+        
+        // 카테고리 설정
+        selectedCategory = post.category
+        categoryButton.setTitle(post.category, for: .normal)
+        
+        // 지역 설정
+        selectedRegion = post.tag
+        regionButton.setTitle(post.tag, for: .normal)
+        
+        // 주소 설정
+        addressTextField.text = post.address
+        detailAddressTextField.text = post.detailAddress
+        
+        // 날짜시간 설정
+        selectedDateTime = post.meetingTime
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MM월 dd일 HH:mm"
+        dateTimeButton.setTitle(formatter.string(from: post.meetingTime), for: .normal)
+        
+        // 모집인원 설정
+        recruitTextField.text = "\(post.recruit)"
+        
+        // 비용 설정
+        costTextField.text = "\(post.cost)"
+        
+        // 기존 이미지 URL들을 UIImage로 변환해서 로드
+        loadExistingImages(from: post.imageUrls)
+    }
+
+    // MARK: - 기존 이미지 로드
+    private func loadExistingImages(from urls: [String]) {
+        let group = DispatchGroup()
+        var loadedImages: [UIImage] = []
+        
+        for url in urls.prefix(10) { // 최대 10개만
+            group.enter()
+            
+            guard let imageUrl = URL(string: url) else {
+                group.leave()
+                continue
+            }
+            
+            URLSession.shared.dataTask(with: imageUrl) { data, response, error in
+                defer { group.leave() }
+                
+                guard let data = data, error == nil, let image = UIImage(data: data) else {
+                    return
+                }
+                
+                loadedImages.append(image)
+            }.resume()
+        }
+        
+        group.notify(queue: .main) {
+            self.selectedImages = loadedImages
+            self.imageCollectionView.reloadData()
+        }
     }
     
     private func setupNavigationBar() {
@@ -278,6 +360,9 @@ class CreatePostViewController: UIViewController {
         dateTimeButton.addTarget(self, action: #selector(dateTimeButtonTapped), for: .touchUpInside)
         submitButton.addTarget(self, action: #selector(submitButtonTapped), for: .touchUpInside)
         
+        // 버튼 타이틀 변경
+        submitButton.setTitle(isEditMode ? "수정 완료" : "작성 완료", for: .normal)
+        
         contentTextView.delegate = self
     }
     
@@ -362,10 +447,56 @@ class CreatePostViewController: UIViewController {
         guard validateInput() else { return }
         
         submitButton.isEnabled = false
-        submitButton.setTitle("업로드 중...", for: .normal)
+        submitButton.setTitle(isEditMode ? "수정 중..." : "업로드 중...", for: .normal)
         
-        uploadPost()
+        if isEditMode {
+            updatePost()
+        } else {
+            uploadPost()
+        }
     }
+    
+    
+    // MARK: - 게시물 수정
+    private func updatePost() {
+        guard let post = editingPost else {
+            resetSubmitButton()
+            return
+        }
+        
+        // 이미지 업로드 후 게시물 데이터 업데이트
+        uploadImages { [weak self] imageUrls in
+            guard let self = self else { return }
+            
+            let updatedData: [String: Any] = [
+                "title": self.titleTextField.text!.trimmingCharacters(in: .whitespacesAndNewlines),
+                "content": self.contentTextView.text!.trimmingCharacters(in: .whitespacesAndNewlines),
+                "tag": self.selectedRegion!,
+                "category": self.selectedCategory!,
+                "address": self.addressTextField.text!.trimmingCharacters(in: .whitespacesAndNewlines),
+                "detailAddress": self.detailAddressTextField.text!.trimmingCharacters(in: .whitespacesAndNewlines),
+                "recruit": Int(self.recruitTextField.text!)!,
+                "cost": Int(self.costTextField.text!)!,
+                "meetingTime": Timestamp(date: self.selectedDateTime!),
+                "imageUrl": imageUrls.first ?? "",
+                "imageUrls": imageUrls
+            ]
+            
+            let db = Firestore.firestore()
+            db.collection("posts").document(post.id).updateData(updatedData) { error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        self.showAlert(message: "게시물 수정 실패: \(error.localizedDescription)")
+                        self.resetSubmitButton()
+                        return
+                    }
+                    
+                    self.showUpdateSuccessAlert()
+                }
+            }
+        }
+    }
+
     
     private func showSelectionAlert(title: String, options: [String], completion: @escaping (String) -> Void) {
         let alert = UIAlertController(title: title, message: nil, preferredStyle: .actionSheet)
@@ -514,9 +645,19 @@ class CreatePostViewController: UIViewController {
         }
     }
     
+    // MARK: - resetSubmitButton 메서드 수정
     private func resetSubmitButton() {
         submitButton.isEnabled = true
-        submitButton.setTitle("작성 완료", for: .normal)
+        submitButton.setTitle(isEditMode ? "수정 완료" : "작성 완료", for: .normal)
+    }
+
+    // MARK: - 수정 성공 알림
+    private func showUpdateSuccessAlert() {
+        let alert = UIAlertController(title: "완료", message: "게시물이 성공적으로 수정되었습니다.", preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "확인", style: .default) { _ in
+            self.dismiss(animated: true)
+        })
+        present(alert, animated: true)
     }
     
     private func showSuccessAlert() {

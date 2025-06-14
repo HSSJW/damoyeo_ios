@@ -379,6 +379,7 @@ extension PostListViewController: UITableViewDataSource, UITableViewDelegate {
         let post = filteredPosts[indexPath.row]
         
         cell.configure(with: post)
+        cell.delegate = self  // delegate 설정
         cell.accessoryType = .disclosureIndicator
         
         return cell
@@ -400,5 +401,13 @@ extension PostListViewController: UITableViewDataSource, UITableViewDelegate {
                 self.tableView.reloadRows(at: [indexPath], with: .none)
             }
         }
+    }
+}
+
+// MARK: - PostTableViewCellDelegate
+extension PostListViewController: PostTableViewCellDelegate {
+    func postCell(_ cell: PostTableViewCell, didToggleFavoriteFor post: Post) {
+        // 좋아요 상태 변경 시 필요한 처리 (예: 업데이트 로그 등)
+        print("좋아요 상태 변경됨: \(post.title)")
     }
 }
