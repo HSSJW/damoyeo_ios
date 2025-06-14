@@ -1,10 +1,3 @@
-//
-//  ImageCacheManager.swift
-//  damoyeo
-//
-//  Created by 송진우 on 6/15/25.
-//
-
 import UIKit
 
 class ImageCacheManager {

@@ -1,10 +1,3 @@
-//
-//  PostDetailViewController.swift
-//  damoyeo
-//
-//  Created by 송진우 on 6/8/25.
-//
-
 import UIKit
 import FirebaseFirestore
 import FirebaseAuth
@@ -793,7 +786,7 @@ class PostDetailViewController: UIViewController {
                     self?.isParticipating = false
                     self?.participantsCount = max(0, (self?.participantsCount ?? 1) - 1)
                     self?.updateParticipateButton()
-                    print("✅ 참가 취소 완료")
+                    print(" 참가 취소 완료")
                 }
             }
         } else {
@@ -822,7 +815,7 @@ class PostDetailViewController: UIViewController {
                     self?.isParticipating = true
                     self?.participantsCount = (self?.participantsCount ?? 0) + 1
                     self?.updateParticipateButton()
-                    print("✅ 참가 신청 완료")
+                    print("참가 신청 완료")
                 }
             }
         }

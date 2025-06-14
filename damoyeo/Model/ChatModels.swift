@@ -1,10 +1,3 @@
-//
-//  ChatModels.swift
-//  damoyeo
-//
-//  Created by 송진우 on 6/14/25.
-//
-
 import Foundation
 import FirebaseFirestore
 import FirebaseAuth

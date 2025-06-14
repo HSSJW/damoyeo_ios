@@ -1,10 +1,3 @@
-//
-//  LoginViewController.swift
-//  damoyeo
-//
-//  Created by 송진우 on 6/8/25.
-//
-
 import UIKit
 import FirebaseAuth
 import FirebaseFirestore
@@ -318,18 +311,18 @@ class LoginViewController: UIViewController {
     }
     
     private func navigateToMainApp() {
-        print("🎯 LoginVC: 직접 메인 앱으로 이동")
+        print(" LoginVC: 직접 메인 앱으로 이동")
         
         let mainApp = TabBarController()
         
         if let window = view.window {
-            print("🪟 LoginVC: Window 찾음, 직접 전환")
+            print("LoginVC: Window 찾음, 직접 전환")
             window.rootViewController = mainApp
             window.makeKeyAndVisible()
             
             UIView.transition(with: window, duration: 0.3, options: .transitionCrossDissolve, animations: nil) 
         } else {
-            print("❌ LoginVC: Window를 찾을 수 없음")
+            print(" LoginVC: Window를 찾을 수 없음")
         }
     }
     

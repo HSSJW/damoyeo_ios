@@ -1,10 +1,3 @@
-//
-//  CreatePostViewController.swift
-//  damoyeo
-//
-//  Created by 송진우 on 6/8/25.
-//
-
 import UIKit
 import FirebaseAuth
 import FirebaseFirestore
@@ -287,7 +280,7 @@ class CreatePostViewController: UIViewController {
     
     // MARK: - AI 생성 데이터로 폼 채우기
     func fillFormWithGeneratedData(_ data: GeneratedPostData) {
-        print("🎯 AI 생성 데이터로 폼 채우기 시작")
+        print("AI 생성 데이터로 폼 채우기 시작")
         
         // 애니메이션으로 부드럽게 채우기
         UIView.animate(withDuration: 0.3) {
@@ -331,7 +324,7 @@ class CreatePostViewController: UIViewController {
             self.scrollView.setContentOffset(.zero, animated: true)
         }
         
-        print("✅ AI 생성 데이터로 폼 채우기 완료")
+        print("AI 생성 데이터 폼 채우기 완료")
     }
     
     private func showGenerationSuccessAlert() {
@@ -793,7 +786,7 @@ class CreatePostViewController: UIViewController {
                             print("참가자 자동 등록 실패: \(error)")
                             // 게시물은 생성되었으니 성공으로 처리
                         } else {
-                            print("✅ 작성자가 참가자로 자동 등록되었습니다")
+                            print("작성자가 참가자로 자동 등록")
                         }
                         
                         self.showSuccessAlert()

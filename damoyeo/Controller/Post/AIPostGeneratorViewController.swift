@@ -1,10 +1,3 @@
-//
-//  AIPostGeneratorViewController.swift
-//  damoyeo
-//
-//  AI를 활용한 자연어 게시물 생성기
-//
-
 import UIKit
 
 class AIPostGeneratorViewController: UIViewController {
@@ -292,7 +285,7 @@ class AIPostGeneratorViewController: UIViewController {
     
     // MARK: - AI 게시물 생성
     private func generatePostWithAI(inputText: String) {
-        print("🚀 AI 생성 시작: \(inputText)")
+        print("AI 생성 시작: \(inputText)")
         
         FirebaseAIManager.shared.generatePost(from: inputText) { [weak self] result in
             DispatchQueue.main.async {
@@ -300,12 +293,12 @@ class AIPostGeneratorViewController: UIViewController {
                 
                 switch result {
                 case .success(let postData):
-                    print("✅ AI 생성 성공: \(postData.title)")
+                   
                     self?.generatedPostData = postData
                     self?.showPreview(postData)
                     
                 case .failure(let error):
-                    print("❌ AI 생성 실패: \(error)")
+                    print("AI 생성 실패: \(error)")
                     self?.showAlert(message: "AI 생성 중 오류가 발생했습니다: \(error.localizedDescription)")
                 }
             }

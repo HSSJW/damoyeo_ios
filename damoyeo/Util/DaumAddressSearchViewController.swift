@@ -223,13 +223,13 @@ extension DaumAddressSearchViewController: WKScriptMessageHandler {
         
         // JavaScript 콘솔 로그 출력
         if message.name == "consoleLog" {
-            print("🟡 JS Console: \(message.body)")
+            print(" JS Console: \(message.body)")
             return
         }
         
         // 주소 메시지 처리
         if message.name == "addressCallback" {
-            print("🔴 주소 메시지 수신: \(message.body)")
+            print(" 주소 메시지 수신: \(message.body)")
             
             if let address = message.body as? String, !address.isEmpty {
                 DispatchQueue.main.async {

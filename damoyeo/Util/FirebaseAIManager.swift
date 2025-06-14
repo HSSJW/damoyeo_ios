@@ -1,10 +1,3 @@
-//
-//  FirebaseAIManager.swift
-//  damoyeo
-//
-//  Firebase AI를 활용한 게시물 생성 매니저
-//
-
 import Foundation
 
 class FirebaseAIManager {
@@ -15,10 +8,10 @@ class FirebaseAIManager {
         guard let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
               let plist = NSDictionary(contentsOfFile: path),
               let apiKey = plist["GEMINI_API_KEY"] as? String else {
-            print("❌ Gemini API Key not found in GoogleService-Info.plist")
+            print(" Gemini API Key not found in GoogleService-Info.plist")
             return "YOUR_API_KEY_HERE"
         }
-        print("🔑 API Key 읽기 성공: \(apiKey)") // 디버깅용 추가
+        print(" API Key 읽기 성공: \(apiKey)") // 디버깅용 추가
         return apiKey
     }
     
@@ -53,7 +46,7 @@ class FirebaseAIManager {
             
             // 네트워크 에러 체크
             if let error = error {
-                print("❌ Network Error: \(error)")
+                print(" Network Error: \(error)")
                 completion(Result<GeneratedPostData, APIError>.failure(APIError.invalidResponse))
                 return
             }
@@ -65,7 +58,7 @@ class FirebaseAIManager {
             }
             
             guard httpResponse.statusCode == 200 else {
-                print("❌ HTTP Error: \(httpResponse.statusCode)")
+                print(" HTTP Error: \(httpResponse.statusCode)")
                 completion(Result<GeneratedPostData, APIError>.failure(APIError.httpError(httpResponse.statusCode)))
                 return
             }
@@ -166,7 +159,7 @@ class FirebaseAIManager {
                 return
             }
             
-            print("🔍 API Response: \(json)")
+            print(" API Response: \(json)")
             
             // Gemini API 응답 구조 파싱
             guard let candidates = json["candidates"] as? [[String: Any]],
@@ -181,7 +174,7 @@ class FirebaseAIManager {
                 return
             }
             
-            print("🔍 Generated Text: \(text)")
+            print(" Generated Text: \(text)")
             
             // JSON 텍스트에서 실제 JSON 추출
             let cleanedText = extractJSONFromText(text)
@@ -244,7 +237,7 @@ class FirebaseAIManager {
               let meetingDate = json["meetingDate"] as? String,
               let meetingTime = json["meetingTime"] as? String else {
             
-            print("❌ Missing required fields in JSON: \(json)")
+            print(" Missing required fields in JSON: \(json)")
             throw APIError.missingRequiredFields
         }
         
@@ -254,7 +247,7 @@ class FirebaseAIManager {
         let dateTimeString = "\(meetingDate) \(meetingTime)"
         
         guard let meetingDateTime = dateFormatter.date(from: dateTimeString) else {
-            print("❌ Invalid date format: \(dateTimeString)")
+            print(" Invalid date format: \(dateTimeString)")
             throw APIError.invalidDateFormat
         }
         
