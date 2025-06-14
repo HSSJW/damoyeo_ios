@@ -18,6 +18,7 @@ class PostDetailViewController: UIViewController {
     private var favoriteCount = 0
     private var authorId: String = ""
     private var isCurrentUserAuthor = false
+    private var isParticipating = false // 현재 사용자의 참가 상태
     
     // MARK: - UI Components
     private let scrollView = UIScrollView()
@@ -141,14 +142,16 @@ class PostDetailViewController: UIViewController {
         fatalError("init(coder:) has not been implemented")
     }
     
+    // viewDidLoad에서 호출할 메서드 추가
     override func viewDidLoad() {
         super.viewDidLoad()
         setupUI()
         configureWithPost()
-        loadPostDetails()  // 이 메서드 안에서 setupNavigationBar() 호출됨
+        loadPostDetails()
         loadParticipantsData()
         loadFavoriteData()
         checkUserFavoriteStatus()
+        checkUserParticipationStatus() // 추가
     }
     
     // MARK: - UI Setup
@@ -378,13 +381,31 @@ class PostDetailViewController: UIViewController {
         }.resume()
     }
     
+    // MARK: - 참가 버튼 업데이트 (기존 메서드 수정)
     private func updateParticipateButton() {
         if isCurrentUserAuthor {
+            // 본인 게시물인 경우
             participateButton.setTitle("참여인원 확인 (\(participantsCount)/\(post.recruit))", for: .normal)
-            participateButton.backgroundColor = .systemGray
-        } else {
-            participateButton.setTitle("참여하기 (\(participantsCount)/\(post.recruit))", for: .normal)
             participateButton.backgroundColor = .systemBlue
+        } else {
+            // 다른 사람 게시물인 경우
+            let isRecruitmentFull = participantsCount >= post.recruit
+            
+            if isParticipating {
+                // 이미 참가한 상태
+                participateButton.setTitle("참가 취소 (\(participantsCount)/\(post.recruit))", for: .normal)
+                participateButton.backgroundColor = .systemOrange
+            } else if isRecruitmentFull {
+                // 모집 마감
+                participateButton.setTitle("모집 마감 (\(participantsCount)/\(post.recruit))", for: .normal)
+                participateButton.backgroundColor = .systemGray
+                participateButton.isEnabled = false
+            } else {
+                // 참가 가능
+                participateButton.setTitle("참가하기 (\(participantsCount)/\(post.recruit))", for: .normal)
+                participateButton.backgroundColor = .systemBlue
+                participateButton.isEnabled = true
+            }
         }
     }
     
@@ -491,14 +512,36 @@ class PostDetailViewController: UIViewController {
         }
     }
     
+    // MARK: - 참가 버튼 액션 (기존 메서드 수정)
     @objc private func participateButtonTapped() {
         if isCurrentUserAuthor {
             // 본인 게시물인 경우 참여인원 목록 표시
             showParticipantsList()
         } else {
-            // 다른 사람 게시물인 경우 참여 기능
-            print("참여하기 버튼 탭됨")
-            // TODO: 참여 기능 구현
+            // 다른 사람 게시물인 경우 참가/취소 기능
+            guard Auth.auth().currentUser != nil else {
+                showLoginAlert()
+                return
+            }
+            
+            // 모집 마감인 경우 처리
+            if participantsCount >= post.recruit && !isParticipating {
+                showRecruitmentFullAlert()
+                return
+            }
+            
+            // 확인 알림 표시
+            let actionTitle = isParticipating ? "참가를 취소하시겠습니까?" : "이 모임에 참가하시겠습니까?"
+            let buttonTitle = isParticipating ? "취소" : "참가"
+            
+            let alert = UIAlertController(title: "참가 확인", message: actionTitle, preferredStyle: .alert)
+            
+            alert.addAction(UIAlertAction(title: "아니오", style: .cancel))
+            alert.addAction(UIAlertAction(title: buttonTitle, style: .default) { [weak self] _ in
+                self?.toggleParticipation()
+            })
+            
+            present(alert, animated: true)
         }
     }
     
@@ -578,11 +621,11 @@ class PostDetailViewController: UIViewController {
     }
     
     private func showParticipantsList() {
-        // TODO: 참여인원 목록 표시 기능 구현
-        let alert = UIAlertController(title: "참여인원 목록", message: "현재 \(participantsCount)명이 참여 중입니다.", preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "확인", style: .default))
-        present(alert, animated: true)
+        let participantsListVC = ParticipantsListViewController(postId: post.id, participantsCount: participantsCount)
+        let navController = UINavigationController(rootViewController: participantsListVC)
+        present(navController, animated: true)
     }
+    
     
     private func showLoginAlert() {
         let alert = UIAlertController(
@@ -607,4 +650,90 @@ class PostDetailViewController: UIViewController {
         })
         present(alert, animated: true)
     }
+    
+    // MARK: - 참가 상태 확인
+        private func checkUserParticipationStatus() {
+            guard let currentUserId = Auth.auth().currentUser?.uid else { return }
+            
+            let db = Firestore.firestore()
+            db.collection("posts").document(post.id).collection("proposers").document(currentUserId).getDocument { [weak self] document, error in
+                DispatchQueue.main.async {
+                    self?.isParticipating = document?.exists ?? false
+                    self?.updateParticipateButton()
+                }
+            }
+        }
+    
+    // MARK: - 참가/취소 토글
+    private func toggleParticipation() {
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            showLoginAlert()
+            return
+        }
+        
+        let db = Firestore.firestore()
+        let proposerRef = db.collection("posts").document(post.id).collection("proposers").document(currentUserId)
+        
+        if isParticipating {
+            // 참가 취소
+            proposerRef.delete { [weak self] error in
+                if let error = error {
+                    print("참가 취소 실패: \(error)")
+                    DispatchQueue.main.async {
+                        self?.showErrorAlert(message: "참가 취소에 실패했습니다.")
+                    }
+                    return
+                }
+                
+                DispatchQueue.main.async {
+                    self?.isParticipating = false
+                    self?.participantsCount = max(0, (self?.participantsCount ?? 1) - 1)
+                    self?.updateParticipateButton()
+                    print("✅ 참가 취소 완료")
+                }
+            }
+        } else {
+            // 참가 신청
+            // 먼저 현재 참가 인원 확인
+            if participantsCount >= post.recruit {
+                showRecruitmentFullAlert()
+                return
+            }
+            
+            let participationData: [String: Any] = [
+                "user_id": currentUserId,
+                "createdAt": Timestamp(date: Date())
+            ]
+            
+            proposerRef.setData(participationData) { [weak self] error in
+                if let error = error {
+                    print("참가 신청 실패: \(error)")
+                    DispatchQueue.main.async {
+                        self?.showErrorAlert(message: "참가 신청에 실패했습니다.")
+                    }
+                    return
+                }
+                
+                DispatchQueue.main.async {
+                    self?.isParticipating = true
+                    self?.participantsCount = (self?.participantsCount ?? 0) + 1
+                    self?.updateParticipateButton()
+                    print("✅ 참가 신청 완료")
+                }
+            }
+        }
+    }
+    
+    
+    // MARK: - 모집 인원 초과 알림
+    private func showRecruitmentFullAlert() {
+        let alert = UIAlertController(
+            title: "모집 마감",
+            message: "모집 인원이 모두 모집되었습니다.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "확인", style: .default))
+        present(alert, animated: true)
+    }
+    
 }
