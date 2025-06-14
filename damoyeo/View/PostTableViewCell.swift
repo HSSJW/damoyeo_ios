@@ -13,6 +13,7 @@ class PostTableViewCell: UITableViewCell {
     private var post: Post?
     private var isFavorited = false
     private var participantsCount = 0
+    private var currentImageURL: String = "" // 현재 로딩 중인 이미지 URL 추적
     
     // MARK: - UI Components
     private let postImageView: UIImageView = {
@@ -70,12 +71,25 @@ class PostTableViewCell: UITableViewCell {
         fatalError("init(coder:) has not been implemented")
     }
     
+    // MARK: - 셀 재사용 처리 (중복 제거하고 개선)
     override func prepareForReuse() {
         super.prepareForReuse()
-        postImageView.image = nil
+        
+        // 기본값으로 초기화
+        postImageView.image = UIImage(systemName: "photo")
         post = nil
         isFavorited = false
         participantsCount = 0
+        currentImageURL = ""
+        
+        // 텍스트 초기화
+        titleLabel.text = nil
+        contentLabel.text = nil
+        tagLabel.text = nil
+        participantsLabel.text = nil
+        
+        // 좋아요 버튼 초기화
+        favoriteButton.setImage(UIImage(systemName: "heart"), for: .normal)
     }
     
     // MARK: - UI Setup
@@ -140,33 +154,20 @@ class PostTableViewCell: UITableViewCell {
         
         tagLabel.text = "지역: \(post.tag)"
         
-        // 이미지 로드
-        loadImage(from: post.imageUrls.first ?? post.imageUrl)
+        // 개선된 이미지 로딩 (ImageCacheManager 사용)
+        let imageUrlString = post.imageUrls.first ?? post.imageUrl
+        currentImageURL = imageUrlString
+        
+        let placeholder = UIImage(systemName: "photo")
+        postImageView.loadImage(from: imageUrlString, placeholder: placeholder)
         
         // 좋아요 상태 및 참여인원 로드
         loadFavoriteStatus()
         loadParticipantsCount()
     }
     
-    private func loadImage(from urlString: String) {
-        guard !urlString.isEmpty, let url = URL(string: urlString) else {
-            postImageView.image = UIImage(systemName: "photo.fill")
-            return
-        }
-        
-        URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
-            guard let data = data, error == nil, let image = UIImage(data: data) else {
-                DispatchQueue.main.async {
-                    self?.postImageView.image = UIImage(systemName: "photo.fill")
-                }
-                return
-            }
-            
-            DispatchQueue.main.async {
-                self?.postImageView.image = image
-            }
-        }.resume()
-    }
+    // MARK: - 기존 loadImage 메서드 제거하고 ImageCacheManager 사용
+    // loadImage 메서드는 제거 - UIImageView extension에서 처리
     
     private func loadFavoriteStatus() {
         guard let post = post, let currentUserId = Auth.auth().currentUser?.uid else {

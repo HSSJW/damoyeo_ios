@@ -318,8 +318,9 @@ class PostDetailViewController: UIViewController {
         // 카테고리/지역
         categoryTagLabel.text = "\(post.category) • \(post.tag)"
         
-        // 이미지 로딩
-        loadImage(from: post.imageUrls.first ?? post.imageUrl)
+        // 개선된 이미지 로딩 - 첫 번째 이미지 표시
+        let imageUrlString = post.imageUrls.first ?? post.imageUrl
+        loadImage(from: imageUrlString)
         
         updateParticipateButton()
     }
@@ -370,15 +371,8 @@ class PostDetailViewController: UIViewController {
     }
     
     private func loadAuthorImage(from urlString: String) {
-        guard let url = URL(string: urlString) else { return }
-        
-        URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
-            guard let data = data, error == nil, let image = UIImage(data: data) else { return }
-            
-            DispatchQueue.main.async {
-                self?.authorImageView.image = image
-            }
-        }.resume()
+        let placeholder = UIImage(systemName: "person.circle.fill")
+        authorImageView.loadImage(from: urlString, placeholder: placeholder)
     }
     
     // MARK: - 참가 버튼 업데이트 (기존 메서드 수정)
@@ -447,23 +441,8 @@ class PostDetailViewController: UIViewController {
     }
     
     private func loadImage(from urlString: String) {
-        guard !urlString.isEmpty, let url = URL(string: urlString) else {
-            postImageView.image = UIImage(systemName: "photo.fill")
-            return
-        }
-        
-        URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
-            guard let data = data, error == nil, let image = UIImage(data: data) else {
-                DispatchQueue.main.async {
-                    self?.postImageView.image = UIImage(systemName: "photo.fill")
-                }
-                return
-            }
-            
-            DispatchQueue.main.async {
-                self?.postImageView.image = image
-            }
-        }.resume()
+        let placeholder = UIImage(systemName: "photo.fill")
+        postImageView.loadImage(from: urlString, placeholder: placeholder)
     }
     
     // MARK: - Actions
