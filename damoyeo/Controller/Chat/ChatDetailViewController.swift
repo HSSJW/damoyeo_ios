@@ -121,6 +121,9 @@ class ChatDetailViewController: UIViewController {
         tableView.dataSource = self
         tableView.register(MessageCell.self, forCellReuseIdentifier: "MessageCell")
         tableView.register(DateSeparatorCell.self, forCellReuseIdentifier: "DateSeparatorCell")
+        
+        // 테이블뷰를 아래쪽부터 채우도록 설정
+        tableView.transform = CGAffineTransform(scaleX: 1, y: -1)
     }
     
     private func setupKeyboardObservers() {
@@ -163,7 +166,7 @@ class ChatDetailViewController: UIViewController {
         listener = db.collection("chats")
             .document(chatId)
             .collection("messages")
-            .order(by: "timestamp", descending: true)
+            .order(by: "timestamp", descending: false) // ascending으로 변경
             .addSnapshotListener { [weak self] snapshot, error in
                 
                 if let error = error {
@@ -173,13 +176,16 @@ class ChatDetailViewController: UIViewController {
                 
                 guard let documents = snapshot?.documents else { return }
                 
-                self?.messages = documents.compactMap { doc in
+                let newMessages = documents.compactMap { doc in
                     ChatMessage(document: doc)
                 }
                 
+                // 메시지 배열을 역순으로 저장 (최신 메시지가 먼저 오도록)
+                self?.messages = Array(newMessages.reversed())
+                
                 DispatchQueue.main.async {
                     self?.tableView.reloadData()
-                    self?.scrollToBottom()
+                    self?.scrollToBottom(animated: false)
                     self?.markMessagesAsRead()
                 }
             }
@@ -258,14 +264,19 @@ class ChatDetailViewController: UIViewController {
             "lastMessage": messageText,
             "timestamp": FieldValue.serverTimestamp()
         ])
+        
+        // 메시지 전송 후 스크롤
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.scrollToBottom(animated: true)
+        }
     }
     
-    private func scrollToBottom() {
+    private func scrollToBottom(animated: Bool = true) {
         guard !messages.isEmpty else { return }
         
         DispatchQueue.main.async {
-            let indexPath = IndexPath(row: 0, section: 0)
-            self.tableView.scrollToRow(at: indexPath, at: .bottom, animated: true)
+            let indexPath = IndexPath(row: 0, section: 0) // 첫 번째 셀로 스크롤 (transform으로 뒤집혀 있어서 실제로는 마지막)
+            self.tableView.scrollToRow(at: indexPath, at: .top, animated: animated)
         }
     }
     
@@ -281,7 +292,7 @@ class ChatDetailViewController: UIViewController {
             self.view.layoutIfNeeded()
         }
         
-        scrollToBottom()
+        scrollToBottom(animated: true)
     }
     
     @objc private func keyboardWillHide(_ notification: Notification) {
@@ -304,6 +315,9 @@ extension ChatDetailViewController: UITableViewDataSource {
         let message = messages[indexPath.row]
         
         let cell = tableView.dequeueReusableCell(withIdentifier: "MessageCell", for: indexPath) as! MessageCell
+        
+        // 셀도 뒤집어서 정상 방향으로 보이도록 설정
+        cell.transform = CGAffineTransform(scaleX: 1, y: -1)
         cell.configure(with: message, otherUserProfileImage: otherUserProfileImage, otherUserName: otherUserName)
         
         return cell
