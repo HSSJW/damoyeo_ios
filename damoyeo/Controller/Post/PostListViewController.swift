@@ -353,7 +353,9 @@ class PostListViewController: UIViewController {
         alert.addAction(UIAlertAction(title: "확인", style: .default))
         present(alert, animated: true)
     }
+    
 }
+
 
 // MARK: - TableView DataSource & Delegate
 extension PostListViewController: UITableViewDataSource, UITableViewDelegate {
@@ -411,3 +413,5 @@ extension PostListViewController: PostTableViewCellDelegate {
         print("좋아요 상태 변경됨: \(post.title)")
     }
 }
+
+

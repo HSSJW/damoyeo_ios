@@ -12,6 +12,57 @@ import FirebaseStorage
 import PhotosUI
 import WebKit
 
+// MARK: - 필요한 구조체들 (파일 상단에 정의)
+struct GeneratedPostData {
+    let title: String
+    let content: String
+    let category: String
+    let region: String
+    let address: String
+    let detailAddress: String
+    let recruit: Int
+    let cost: Int
+    let meetingTime: Date
+}
+
+enum APIError: Error, LocalizedError {
+    case invalidURL
+    case invalidResponse
+    case httpError(Int)
+    case noData
+    case invalidJSON
+    case jsonParseError
+    case missingRequiredFields
+    case invalidDateFormat
+    case invalidRecruitNumber
+    case invalidCost
+    
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL:
+            return "잘못된 URL입니다."
+        case .invalidResponse:
+            return "서버 응답이 올바르지 않습니다."
+        case .httpError(let code):
+            return "HTTP 오류: \(code)"
+        case .noData:
+            return "데이터를 받지 못했습니다."
+        case .invalidJSON:
+            return "JSON 형식이 올바르지 않습니다."
+        case .jsonParseError:
+            return "JSON 파싱에 실패했습니다."
+        case .missingRequiredFields:
+            return "필수 정보가 누락되었습니다."
+        case .invalidDateFormat:
+            return "날짜 형식이 올바르지 않습니다."
+        case .invalidRecruitNumber:
+            return "모집인원은 2-20명 사이여야 합니다."
+        case .invalidCost:
+            return "비용은 0-100,000원 사이여야 합니다."
+        }
+    }
+}
+
 class CreatePostViewController: UIViewController {
     
     // MARK: - UI Components
@@ -22,6 +73,25 @@ class CreatePostViewController: UIViewController {
     private var isEditMode = false
     private var editingPost: Post?
     
+    // AI 생성 버튼
+    private let aiGenerateButton: UIButton = {
+        let button = UIButton(type: .system)
+        button.setTitle("✨ AI로 게시물 생성하기", for: .normal)
+        button.backgroundColor = .systemPurple.withAlphaComponent(0.1)
+        button.setTitleColor(.systemPurple, for: .normal)
+        button.layer.cornerRadius = 8
+        button.layer.borderWidth = 1
+        button.layer.borderColor = UIColor.systemPurple.cgColor
+        button.titleLabel?.font = .systemFont(ofSize: 16, weight: .medium)
+        
+        // 아이콘 추가
+        let config = UIImage.SymbolConfiguration(pointSize: 16, weight: .medium)
+        let icon = UIImage(systemName: "wand.and.stars", withConfiguration: config)
+        button.setImage(icon, for: .normal)
+        button.imageEdgeInsets = UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 8)
+        
+        return button
+    }()
     
     private let titleTextField: UITextField = {
         let textField = UITextField()
@@ -153,6 +223,7 @@ class CreatePostViewController: UIViewController {
         setupNavigationBar()
         setupActions()
         setupImageCollection()
+        setupAIFeature() // AI 기능 설정 추가
         
         // 수정 모드인 경우 기존 데이터 로드
         if isEditMode, let post = editingPost {
@@ -160,14 +231,12 @@ class CreatePostViewController: UIViewController {
         }
     }
     
-    
     // 수정모드
     func setEditMode(with post: Post) {
         isEditMode = true
         editingPost = post
     }
 
-    
     // MARK: - UI Setup
     private func setupUI() {
         view.backgroundColor = .systemBackground
@@ -176,13 +245,104 @@ class CreatePostViewController: UIViewController {
         view.addSubview(scrollView)
         scrollView.addSubview(contentView)
         
-        [titleTextField, categoryButton, regionButton, addressTextField, addressButton,
+        // AI 버튼을 맨 처음에 추가
+        [aiGenerateButton, titleTextField, categoryButton, regionButton, addressTextField, addressButton,
          detailAddressTextField, dateTimeButton, recruitTextField, costTextField,
          contentTextView, imageCollectionView, submitButton].forEach {
             contentView.addSubview($0)
         }
         
         setupConstraints()
+    }
+    
+    // MARK: - AI 기능 설정
+    private func setupAIFeature() {
+        // 수정 모드일 때는 AI 버튼 숨기기
+        aiGenerateButton.isHidden = isEditMode
+        
+        aiGenerateButton.addTarget(self, action: #selector(aiGenerateButtonTapped), for: .touchUpInside)
+    }
+    
+    @objc private func aiGenerateButtonTapped() {
+        let aiGeneratorVC = AIPostGeneratorViewController()
+        
+        // AI 생성 완료 콜백 설정
+        aiGeneratorVC.onPostGenerated = { [weak self] (generatedData: GeneratedPostData) in
+            self?.fillFormWithGeneratedData(generatedData)
+        }
+        
+        let navController = UINavigationController(rootViewController: aiGeneratorVC)
+        navController.modalPresentationStyle = UIModalPresentationStyle.pageSheet
+        
+        // iOS 15+ 에서 시트 높이 조절
+        if #available(iOS 15.0, *) {
+            if let sheet = navController.sheetPresentationController {
+                sheet.detents = [.large()]
+                sheet.prefersGrabberVisible = true
+            }
+        }
+        
+        present(navController, animated: true)
+    }
+    
+    // MARK: - AI 생성 데이터로 폼 채우기
+    func fillFormWithGeneratedData(_ data: GeneratedPostData) {
+        print("🎯 AI 생성 데이터로 폼 채우기 시작")
+        
+        // 애니메이션으로 부드럽게 채우기
+        UIView.animate(withDuration: 0.3) {
+            // 제목 설정
+            self.titleTextField.text = data.title
+            
+            // 내용 설정
+            self.contentTextView.text = data.content
+            self.contentTextView.textColor = .label
+            
+            // 카테고리 설정
+            self.selectedCategory = data.category
+            self.categoryButton.setTitle(data.category, for: .normal)
+            
+            // 지역 설정
+            self.selectedRegion = data.region
+            self.regionButton.setTitle(data.region, for: .normal)
+            
+            // 주소 설정
+            self.addressTextField.text = data.address
+            self.detailAddressTextField.text = data.detailAddress
+            
+            // 모집인원 설정
+            self.recruitTextField.text = "\(data.recruit)"
+            
+            // 비용 설정
+            self.costTextField.text = "\(data.cost)"
+        }
+        
+        // 날짜시간 설정 (애니메이션 후)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            self.selectedDateTime = data.meetingTime
+            let formatter = DateFormatter()
+            formatter.dateFormat = "MM월 dd일 HH:mm"
+            self.dateTimeButton.setTitle(formatter.string(from: data.meetingTime), for: .normal)
+            
+            // 성공 알림 표시
+            self.showGenerationSuccessAlert()
+            
+            // 스크롤을 맨 위로 이동
+            self.scrollView.setContentOffset(.zero, animated: true)
+        }
+        
+        print("✅ AI 생성 데이터로 폼 채우기 완료")
+    }
+    
+    private func showGenerationSuccessAlert() {
+        let alert = UIAlertController(
+            title: "AI 생성 완료! ✨",
+            message: "게시물이 자동으로 생성되었습니다. 내용을 확인하고 필요시 수정해주세요.",
+            preferredStyle: .alert
+        )
+        
+        alert.addAction(UIAlertAction(title: "확인", style: .default))
+        present(alert, animated: true)
     }
     
     // MARK: - 기존 게시물 데이터 로드
@@ -258,7 +418,7 @@ class CreatePostViewController: UIViewController {
     }
     
     private func setupConstraints() {
-        [scrollView, contentView, titleTextField, categoryButton, regionButton,
+        [scrollView, contentView, aiGenerateButton, titleTextField, categoryButton, regionButton,
          addressTextField, addressButton, detailAddressTextField, dateTimeButton,
          recruitTextField, costTextField, contentTextView, imageCollectionView,
          submitButton].forEach {
@@ -279,8 +439,14 @@ class CreatePostViewController: UIViewController {
             contentView.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor),
             contentView.widthAnchor.constraint(equalTo: scrollView.widthAnchor),
             
-            // Title
-            titleTextField.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
+            // AI Generate Button (맨 위)
+            aiGenerateButton.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
+            aiGenerateButton.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            aiGenerateButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            aiGenerateButton.heightAnchor.constraint(equalToConstant: 50),
+            
+            // Title (AI 버튼 아래)
+            titleTextField.topAnchor.constraint(equalTo: aiGenerateButton.bottomAnchor, constant: 16),
             titleTextField.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             titleTextField.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             titleTextField.heightAnchor.constraint(equalToConstant: 50),
@@ -392,30 +558,25 @@ class CreatePostViewController: UIViewController {
         }
     }
     
-    // addressButtonTapped 메서드 수정
     @objc private func addressButtonTapped() {
         showDaumAddressSearch()
     }
 
-    // Daum 우편번호 서비스 사용
     private func showDaumAddressSearch() {
         print("주소 검색 시작")
         let addressSearchVC = DaumAddressSearchViewController()
         
         addressSearchVC.onAddressSelected = { [weak self] address in
             DispatchQueue.main.async {
-                
                 self?.addressTextField.text = address
-                
             }
         }
         
         let navController = UINavigationController(rootViewController: addressSearchVC)
-        navController.modalPresentationStyle = .pageSheet
+        navController.modalPresentationStyle = UIModalPresentationStyle.pageSheet
         present(navController, animated: true)
     }
     
-    // CreatePostViewController.swift에서 이 부분만 수정
     @objc private func dateTimeButtonTapped() {
         showDateTimeSelection()
     }
@@ -429,7 +590,8 @@ class CreatePostViewController: UIViewController {
             dateTimeVC.selectedDateTime = selectedDateTime
         }
         
-        dateTimeVC.onDateTimeSelected = { [weak self] dateTime in
+        // 클로저 타입 명시
+        dateTimeVC.onDateTimeSelected = { [weak self] (dateTime: Date) in
             self?.selectedDateTime = dateTime
             let formatter = DateFormatter()
             formatter.dateFormat = "MM월 dd일 HH:mm"
@@ -437,11 +599,9 @@ class CreatePostViewController: UIViewController {
         }
         
         let navController = UINavigationController(rootViewController: dateTimeVC)
-        navController.modalPresentationStyle = .pageSheet
+        navController.modalPresentationStyle = UIModalPresentationStyle.pageSheet
         present(navController, animated: true)
     }
-    
-    
     
     @objc private func submitButtonTapped() {
         guard validateInput() else { return }
@@ -455,7 +615,6 @@ class CreatePostViewController: UIViewController {
             uploadPost()
         }
     }
-    
     
     // MARK: - 게시물 수정
     private func updatePost() {
@@ -496,7 +655,6 @@ class CreatePostViewController: UIViewController {
             }
         }
     }
-
     
     private func showSelectionAlert(title: String, options: [String], completion: @escaping (String) -> Void) {
         let alert = UIAlertController(title: title, message: nil, preferredStyle: .actionSheet)
@@ -645,13 +803,11 @@ class CreatePostViewController: UIViewController {
         }
     }
     
-    // MARK: - resetSubmitButton 메서드 수정
     private func resetSubmitButton() {
         submitButton.isEnabled = true
         submitButton.setTitle(isEditMode ? "수정 완료" : "작성 완료", for: .normal)
     }
 
-    // MARK: - 수정 성공 알림
     private func showUpdateSuccessAlert() {
         let alert = UIAlertController(title: "완료", message: "게시물이 성공적으로 수정되었습니다.", preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "확인", style: .default) { _ in
@@ -920,8 +1076,6 @@ class AddImageCell: UICollectionViewCell {
         onTap?()
     }
 }
-
-
 
 // MARK: - DateTimeSelectionViewController (날짜+시간 통합 선택)
 class DateTimeSelectionViewController: UIViewController {
