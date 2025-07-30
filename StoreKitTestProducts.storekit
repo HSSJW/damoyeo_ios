@@ -1,0 +1,78 @@
+{
+  "identifier" : "StoreKitTestProducts",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "1.99",
+      "familyShareable" : false,
+      "identifier" : "credits_100",
+      "localizations" : [
+        {
+          "description" : "다모여에서 사용할 수 있는 100 크레딧",
+          "displayName" : "100 크레딧",
+          "locale" : "ko"
+        },
+        {
+          "description" : "100 credits for use in Damoyeo",
+          "displayName" : "100 Credits",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "credits_100",
+      "referenceName" : "100 Credits Package",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "identifier" : "credits_500",
+      "localizations" : [
+        {
+          "description" : "다모여에서 사용할 수 있는 500 크레딧 (보너스 50 크레딧 포함)",
+          "displayName" : "500 크레딧",
+          "locale" : "ko"
+        },
+        {
+          "description" : "500 credits for use in Damoyeo (includes 50 bonus credits)",
+          "displayName" : "500 Credits",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "credits_500",
+      "referenceName" : "500 Credits Package",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "9.99",
+      "familyShareable" : false,
+      "identifier" : "credits_1000",
+      "localizations" : [
+        {
+          "description" : "다모여에서 사용할 수 있는 1000 크레딧 (보너스 200 크레딧 포함)",
+          "displayName" : "1000 크레딧",
+          "locale" : "ko"
+        },
+        {
+          "description" : "1000 credits for use in Damoyeo (includes 200 bonus credits)",
+          "displayName" : "1000 Credits",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "credits_1000",
+      "referenceName" : "1000 Credits Package",
+      "type" : "Consumable"
+    }
+  ],
+  "settings" : {
+    "askToBuyEnabled" : false,
+    "failTransactionsEnabled" : false,
+    "locale" : "ko",
+    "storefront" : "KOR",
+    "subscriptionRenewalRate" : "sixTimes"
+  },
+  "subscriptionGroups" : [],
+  "version" : {
+    "major" : 1,
+    "minor" : 0
+  }
+}

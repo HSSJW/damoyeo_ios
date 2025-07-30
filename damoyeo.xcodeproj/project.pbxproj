@@ -7,12 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		CB0D9D0F2E0536DC00FCD735 /* StoreKitTestProducts.storekit in Resources */ = {isa = PBXBuildFile; fileRef = CB0D9D0E2E0536DC00FCD735 /* StoreKitTestProducts.storekit */; };
 		CB8B01722DF2F48300215DAA /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = CB8B01712DF2F48300215DAA /* FirebaseAuth */; };
 		CB8B01742DF2F48300215DAA /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = CB8B01732DF2F48300215DAA /* FirebaseFirestore */; };
 		CB8B01762DF2F48300215DAA /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = CB8B01752DF2F48300215DAA /* FirebaseStorage */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		CB0D9D0E2E0536DC00FCD735 /* StoreKitTestProducts.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = StoreKitTestProducts.storekit; sourceTree = "<group>"; };
 		CBBBB2FF2DF2E72600DE828E /* damoyeo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = damoyeo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -54,6 +56,7 @@
 		CBBBB2F62DF2E72600DE828E = {
 			isa = PBXGroup;
 			children = (
+				CB0D9D0E2E0536DC00FCD735 /* StoreKitTestProducts.storekit */,
 				CBBBB3012DF2E72600DE828E /* damoyeo */,
 				CBBBB3002DF2E72600DE828E /* Products */,
 			);
@@ -137,6 +140,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CB0D9D0F2E0536DC00FCD735 /* StoreKitTestProducts.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

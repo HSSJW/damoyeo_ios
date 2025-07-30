@@ -17,6 +17,7 @@ class ProfileViewController: UIViewController {
     private var currentFirebaseUser: FirebaseAuth.User?
     private var customUserInfo: [String: Any] = [:]
     private let menuItems = [
+        ("크레딧 구매", "creditcard"),           // 🆕 추가
         ("내 정보 수정", "person.crop.circle"),
         ("비밀번호 변경", "key"),
         ("활동 내역", "clock"),
@@ -78,6 +79,13 @@ class ProfileViewController: UIViewController {
                 }
             }
         }
+    }
+    
+    // 🆕 크레딧 구매 메서드 추가
+    private func showCreditPurchase() {
+        let creditPurchaseVC = CreditPurchaseViewController()
+        let navController = UINavigationController(rootViewController: creditPurchaseVC)
+        present(navController, animated: true)
     }
     
     // MARK: - Actions
@@ -185,13 +193,15 @@ extension ProfileViewController: UITableViewDataSource, UITableViewDelegate {
         guard indexPath.section == 1 else { return }
         
         switch indexPath.row {
-        case 0: editProfile()
-        case 1: changePassword()
-        case 2: showActivity()
-        case 3: logout()
+        case 0: showCreditPurchase()      // 🆕 추가
+        case 1: editProfile()
+        case 2: changePassword()
+        case 3: showActivity()
+        case 4: logout()
         default: break
         }
     }
+
     
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
         return indexPath.section == 0 ? 300 : 60
